@@ -1,0 +1,28 @@
+{
+  "name": "readonly",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.4.3",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "bun --watch apps/api/src/index.ts",
+    "dev:web": "bun run --filter @readonly/web dev",
+    "build:web": "bun run --filter @readonly/web build",
+    "db:generate": "bun run --filter @readonly/db db:generate",
+    "db:migrate": "bun run --filter @readonly/db db:migrate",
+    "db:seed": "bun run --filter @readonly/db db:seed",
+    "db:seed:qa": "bun run --filter @readonly/db db:seed:qa",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "check": "bun run typecheck && bun test && biome check"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.6",
+    "@types/bun": "1.4.4",
+    "@types/node": "26.6.6",
+    "typescript": "7.0.2"
+  }
+}

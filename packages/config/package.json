@@ -1,0 +1,8 @@
+{
+  "name": "@readonly/config",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

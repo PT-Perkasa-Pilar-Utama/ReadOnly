@@ -1,0 +1,17 @@
+{
+  "name": "@readonly/api",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/app.ts"
+  },
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "start": "bun src/index.ts"
+  },
+  "dependencies": {
+    "@readonly/config": "workspace:*",
+    "@readonly/shared": "workspace:*",
+    "elysia": "1.4.31"
+  }
+}

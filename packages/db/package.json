@@ -1,0 +1,22 @@
+{
+  "name": "@readonly/db",
+  "private": true,
+  "type": "module",
+  "description": "Drizzle ORM schema, migrations, and dev/qa seeders for ReadOnly.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "db:generate": "drizzle-kit generate --config=drizzle.config.ts",
+    "db:migrate": "bun src/migrate.ts",
+    "db:seed": "bun src/seeds/index.ts",
+    "db:seed:qa": "bun src/seeds/index.ts --env qa"
+  },
+  "dependencies": {
+    "drizzle-orm": "0.45.4",
+    "postgres": "4.1.0"
+  },
+  "devDependencies": {
+    "drizzle-kit": "0.31.11"
+  }
+}

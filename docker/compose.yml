@@ -1,0 +1,20 @@
+services:
+  db:
+    image: postgres:16.15
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-readonly}
+      POSTGRES_USER: ${POSTGRES_USER:-readonly}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-seed123}
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - readonly-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  readonly-postgres:

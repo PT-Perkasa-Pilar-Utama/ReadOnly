@@ -1,0 +1,26 @@
+# Sprint 3: Manajemen Peminjaman, Pengembalian dan Denda, serta Reminder & Popup Login
+
+> **Cakupan:** Mencakup Manajemen Peminjaman Admin (`US-06`), Pengembalian & Denda (`US-09`), serta Reminder Notifikasi & Popup Login (`US-10`, `AC-10.01`–`AC-10.08`). Pemilihan urutan komitmen sprint mengikuti Sprint Planning ([rundown PM](../decisions/2026-11-08-pm-sprint-timeline.md)).
+
+Stories: US-06, US-09, US-10  
+Goal: Selesaikan siklus peminjaman: pengembalian, denda otomatis/manual, perubahan status otomatis harian, daftar notifikasi, dan popup pengingat saat login.
+
+### Backend
+
+| Card ID | PM Card Title | Task Description | AC | Owner | Est | Docs |
+| --- | --- | --- | --- | --- | --- | --- |
+| BE-S3-01 | Daftar + detail pinjaman Admin | `GET /admin/loans` (5 status selain `PENDING`, paginasi 10), `GET /admin/loans/:id` detail peminjam, buku, `late_days`, `fine_amount`, `fine_status`, serta flag tombol aksi. | AC-06.01, AC-06.02 | BE1 | 1.0d | [04-loans](../api-specs/04-loans.md#get-adminloans-daftar-pinjaman-admin) |
+| BE-S3-02 | Job status terlambat | Job harian 00:05 WIB: ubah `BORROWED` ke `OVERDUE`, hitung `late_days` & `fine_amount` awal, advisory lock PostgreSQL, Clock port injectable, catch-up saat startup, endpoint non-prod `POST /admin/jobs/run`. | AC-06.03 | BE1 | 1.5d | [15-scheduler-and-notifications](../technical-specs/15-scheduler-and-notifications.md), [12-loan-lifecycle-and-fines](../technical-specs/12-loan-lifecycle-and-fines.md) |
+| BE-S3-03 | Ajukan pengembalian + rating | `POST /loans/:id/return`: rating 1–5 wajib, transisi `BORROWED` -> `RETURN_PENDING` atau `OVERDUE` -> `FINE_PENDING`, bekukan `late_days` pada `return_requested_at`. | AC-09.01, AC-09.02, AC-09.06 | BE1 | 1.0d | [04-loans](../api-specs/04-loans.md#post-loansidreturn-ajukan-pengembalian--rating-member), [12-loan-lifecycle-and-fines](../technical-specs/12-loan-lifecycle-and-fines.md) |
+| BE-S3-04 | Denda + konfirmasi pengembalian | `POST /admin/loans/:id/fine-payment` (1–4 hari otomatis Rp 2.000, >=5 hari input manual `1..99999999`) dan `POST /admin/loans/:id/return-confirmation`: stok +1 atomik, guard denda `Sudah Bayar`. | AC-09.03, AC-09.04, AC-09.05, AC-09.08, AC-09.09 | BE1 | 1.5d | [04-loans](../api-specs/04-loans.md#post-adminloansidfine-payment-pembayaran-denda), [13-stock-integrity-and-concurrency](../technical-specs/13-stock-integrity-and-concurrency.md) |
+| BE-S3-05 | Notifikasi job + daftar + payload popup login | Job notifikasi (`DUE_SOON_3D`, `DUE_TODAY`, `OVERDUE` dgn unique constraint) dan `GET /notifications` yang mengembalikan daftar notifikasi persisten beserta `login_popups` terurut (`OVERDUE` -> `DUE_TODAY` -> `DUE_SOON`). | AC-10.01, AC-10.02, AC-10.03, AC-10.04, AC-10.05, AC-10.06, AC-10.07, AC-10.08 | BE1 | 1.5d | [05-notifications](../api-specs/05-notifications.md), [15-scheduler-and-notifications](../technical-specs/15-scheduler-and-notifications.md) |
+
+### Frontend
+
+| Card ID | PM Card Title | Task Description | AC | Owner | Est | Docs |
+| --- | --- | --- | --- | --- | --- | --- |
+| FE-S3-01 | Manajemen Peminjaman UI | Daftar pinjaman Admin (5 status), halaman detail peminjaman & rincian keterlambatan/denda. | AC-06.01, AC-06.02 | FE1 | 1.0d | [04-loans](../api-specs/04-loans.md) |
+| FE-S3-02 | Feedback Buku + batal | Tombol `"Kembalikan"`, pop up `"Feedback Buku"`, rating 1–5 bintang wajib, tombol `"Batal"` / `X`. | AC-09.01, AC-09.02, AC-09.06, AC-09.07 | FE1 | 1.5d | [04-loans](../api-specs/04-loans.md#post-loansidreturn-ajukan-pengembalian--rating-member) |
+| FE-S3-03 | Admin konfirmasi + denda UI | Tombol `"Konfirmasi Pengembalian"`, alert rekonfirmasi, tombol `"Pembayaran Denda"` (alert untuk 1–4 hari, pop up `"Biaya Denda"` untuk >=5 hari), validasi & batal input. | AC-09.03, AC-09.04, AC-09.05, AC-09.08, AC-09.09, AC-09.10 | FE1 | 1.5d | [04-loans](../api-specs/04-loans.md), [12-loan-lifecycle-and-fines](../technical-specs/12-loan-lifecycle-and-fines.md) |
+| FE-S3-04 | Notifikasi list + Popup Reminder Login | Ikon Notifikasi + daftar persisten (AC-10.01–10.03), serta komponen Popup Reminder saat login di Home (tampil 3 detik per kondisi sekali per login, urutan `OVERDUE` -> `DUE_TODAY` -> `DUE_SOON`, tombol tutup `X` lanjut ke popup berikutnya tanpa menghapus notifikasi, AC-10.04–10.08). | AC-10.01, AC-10.02, AC-10.03, AC-10.04, AC-10.05, AC-10.06, AC-10.07, AC-10.08 | FE1 | 1.5d | [05-notifications](../api-specs/05-notifications.md), [acceptance-criteria-addendum](../business/acceptance-criteria-addendum.md#us-10-reminder-batas-akhir-pinjaman) |
+| FE-S3-05 | Wiring: return + fine + reminder + popup | Depends on FE-S3-02..04, BE-S3-04..05. Kriteria exit: Playwright E2E menguji pengembalian tepat waktu, terlambat 1–4 hari (Rp 2.000), >=5 hari input manual & batal, rating wajib & batal, job harian mengubah status ke Terlambat (AC-06.03), daftar notifikasi, serta urutan & penutupan popup login (AC-10.04–10.08). | AC-06.03, AC-09.01, AC-09.03, AC-09.04, AC-09.06, AC-09.08, AC-09.09, AC-09.10, AC-10.01, AC-10.02, AC-10.03, AC-10.04, AC-10.05, AC-10.06, AC-10.07, AC-10.08 | FE1 | 1.0d | [04-loans](../api-specs/04-loans.md), [15-scheduler-and-notifications](../technical-specs/15-scheduler-and-notifications.md) |
