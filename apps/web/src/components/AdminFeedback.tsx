@@ -1,4 +1,3 @@
-
 import { Show } from 'solid-js';
 import {
   confirmAdminFeedback,
@@ -43,51 +42,103 @@ export function AdminFeedback() {
     <Show when={feedback()}>
       {(notice) => (
         <div class="admin-feedback-backdrop">
-          <section
-            class={`admin-feedback-modal admin-feedback-modal--${notice().type}`}
-            role={notice().type === 'error' ? 'alertdialog' : 'dialog'}
-            aria-modal="true"
-            aria-labelledby="admin-feedback-title"
-            aria-describedby="admin-feedback-message"
-            data-feedback-id={notice().id}
-            onKeyDown={handleKeyDown}
-          >
-            <div class="admin-feedback-modal__content">
-              <span class="admin-feedback-modal__icon" aria-hidden="true">
-                {notice().type === 'success' ? '✓' : '!'}
-              </span>
+          <Show when={notice().type === 'error'}>
+            <div
+              class={`admin-feedback-modal admin-feedback-modal--${notice().type}`}
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby="admin-feedback-title"
+              aria-describedby="admin-feedback-message"
+              data-feedback-id={notice().id}
+              tabindex="-1"
+              onKeyDown={handleKeyDown}
+            >
+              <div class="admin-feedback-modal__content">
+                <span class="admin-feedback-modal__icon" aria-hidden="true">
+                  !
+                </span>
 
-              <div class="admin-feedback-modal__copy">
-                <h2 id="admin-feedback-title">{notice().title}</h2>
-                <p id="admin-feedback-message">{notice().message}</p>
+                <div class="admin-feedback-modal__copy">
+                  <h2 id="admin-feedback-title">{notice().title}</h2>
+                  <p id="admin-feedback-message">{notice().message}</p>
+                </div>
+              </div>
+
+              <div class="admin-feedback-modal__actions">
+                <Show when={notice().type === 'confirm'}>
+                  <button
+                    class="admin-feedback-modal__button admin-feedback-modal__button--secondary"
+                    type="button"
+                    onClick={dismissAdminFeedback}
+                  >
+                    Batal
+                  </button>
+                </Show>
+
+                <button
+                  class="admin-feedback-modal__button admin-feedback-modal__button--primary"
+                  type="button"
+                  ref={(element) => element.focus()}
+                  onClick={() =>
+                    notice().type === 'confirm'
+                      ? confirmAdminFeedback()
+                      : dismissAdminFeedback()
+                  }
+                >
+                  OK
+                </button>
               </div>
             </div>
+          </Show>
 
-            <div class="admin-feedback-modal__actions">
-              <Show when={notice().type === 'confirm'}>
+          <Show when={notice().type !== 'error'}>
+            <div
+              class={`admin-feedback-modal admin-feedback-modal--${notice().type}`}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="admin-feedback-title"
+              aria-describedby="admin-feedback-message"
+              data-feedback-id={notice().id}
+              tabindex="-1"
+              onKeyDown={handleKeyDown}
+            >
+              <div class="admin-feedback-modal__content">
+                <span class="admin-feedback-modal__icon" aria-hidden="true">
+                  {notice().type === 'success' ? '✓' : '!'}
+                </span>
+
+                <div class="admin-feedback-modal__copy">
+                  <h2 id="admin-feedback-title">{notice().title}</h2>
+                  <p id="admin-feedback-message">{notice().message}</p>
+                </div>
+              </div>
+
+              <div class="admin-feedback-modal__actions">
+                <Show when={notice().type === 'confirm'}>
+                  <button
+                    class="admin-feedback-modal__button admin-feedback-modal__button--secondary"
+                    type="button"
+                    onClick={dismissAdminFeedback}
+                  >
+                    Batal
+                  </button>
+                </Show>
+
                 <button
-                  class="admin-feedback-modal__button admin-feedback-modal__button--secondary"
+                  class="admin-feedback-modal__button admin-feedback-modal__button--primary"
                   type="button"
-                  onClick={dismissAdminFeedback}
+                  ref={(element) => element.focus()}
+                  onClick={() =>
+                    notice().type === 'confirm'
+                      ? confirmAdminFeedback()
+                      : dismissAdminFeedback()
+                  }
                 >
-                  Batal
+                  OK
                 </button>
-              </Show>
-
-              <button
-                class="admin-feedback-modal__button admin-feedback-modal__button--primary"
-                type="button"
-                ref={(element) => element.focus()}
-                onClick={() =>
-                  notice().type === 'confirm'
-                    ? confirmAdminFeedback()
-                    : dismissAdminFeedback()
-                }
-              >
-                OK
-              </button>
+              </div>
             </div>
-          </section>
+          </Show>
         </div>
       )}
     </Show>

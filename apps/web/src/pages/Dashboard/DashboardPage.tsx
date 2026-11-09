@@ -1,4 +1,3 @@
-
 import { createQuery } from '@tanstack/solid-query';
 import { For, Show } from 'solid-js';
 import {
@@ -176,9 +175,8 @@ export function DashboardPage() {
                       style={{ background: chartBackground() }}
                     />
 
-                    <div
+                    <fieldset
                       class="dashboard-chart-legend"
-                      role="group"
                       aria-label="Keterangan grafik"
                     >
                       <div class="dashboard-chart-legend__item">
@@ -224,7 +222,7 @@ export function DashboardPage() {
                           %
                         </strong>
                       </div>
-                    </div>
+                    </fieldset>
                   </div>
                 </section>
               </>

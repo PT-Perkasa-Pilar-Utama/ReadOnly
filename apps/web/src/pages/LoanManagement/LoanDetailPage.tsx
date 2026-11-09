@@ -29,7 +29,8 @@ export function LoanDetailPage(props: LoanDetailPageProps) {
   }));
 
   const loan = () => loanQuery.data;
-  const showFineDetails = () => loan()?.status === 'OVERDUE' || loan()?.status === 'FINE_PENDING';
+  const showFineDetails = () =>
+    loan()?.status === 'OVERDUE' || loan()?.status === 'FINE_PENDING';
 
   return (
     <div class="loan-management-app">
@@ -57,13 +58,20 @@ export function LoanDetailPage(props: LoanDetailPageProps) {
         </section>
 
         <Show when={loanQuery.isPending}>
-          <div class="loan-management-state" aria-live="polite" aria-busy="true">
+          <div
+            class="loan-management-state"
+            aria-live="polite"
+            aria-busy="true"
+          >
             <span class="loan-management-loader" aria-hidden="true" />
           </div>
         </Show>
 
         <Show when={loanQuery.isError}>
-          <div class="loan-management-state loan-management-state--error" role="alert">
+          <div
+            class="loan-management-state loan-management-state--error"
+            role="alert"
+          >
             {getErrorMessage(loanQuery.error)}
           </div>
         </Show>
@@ -71,10 +79,15 @@ export function LoanDetailPage(props: LoanDetailPageProps) {
         <Show when={loan()}>
           {(detail) => (
             <div class="loan-detail-card">
-              <section class="loan-detail-section" aria-labelledby="loan-detail-heading">
+              <section
+                class="loan-detail-section"
+                aria-labelledby="loan-detail-heading"
+              >
                 <div class="loan-detail-section__heading">
                   <h2 id="loan-detail-heading">Detail Peminjaman</h2>
-                  <span class={`loan-status-badge ${getLoanStatusClass(detail().status)}`}>
+                  <span
+                    class={`loan-status-badge ${getLoanStatusClass(detail().status)}`}
+                  >
                     {getLoanStatusLabel(detail().status, detail().status_label)}
                   </span>
                 </div>
@@ -117,7 +130,10 @@ export function LoanDetailPage(props: LoanDetailPageProps) {
                 </div>
               </section>
 
-              <section class="loan-detail-section loan-detail-section--book" aria-labelledby="loan-book-heading">
+              <section
+                class="loan-detail-section loan-detail-section--book"
+                aria-labelledby="loan-book-heading"
+              >
                 <h2 id="loan-book-heading">Detail Buku</h2>
                 <div class="loan-detail-book">
                   <div class="loan-detail-book__cover">
@@ -149,7 +165,9 @@ export function LoanDetailPage(props: LoanDetailPageProps) {
                       </div>
                       <div>
                         <span>Genre</span>
-                        <strong>{detail().book.genres.join(', ') || '-'}</strong>
+                        <strong>
+                          {detail().book.genres.join(', ') || '-'}
+                        </strong>
                       </div>
                     </div>
                     <div class="loan-detail-book__synopsis">

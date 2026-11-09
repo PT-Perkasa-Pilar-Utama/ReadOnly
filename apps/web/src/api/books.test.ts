@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  type AdminBook,
+  type BookGenre,
   filterBooks,
   getCoverValidationMessage,
   getGenreIdsForSubmit,
-  type AdminBook,
-  type BookGenre,
 } from './books';
 
 const fiksi: BookGenre = {
@@ -58,15 +58,15 @@ function coverFile(
 
 describe('Master Buku frontend helpers', () => {
   test('search matches title, author, or genre without case sensitivity', () => {
-    expect(filterBooks(sampleBooks, { q: 'BUMI' }).map((book) => book.id)).toEqual([
-      'book-1',
-    ]);
-    expect(filterBooks(sampleBooks, { q: 'robert' }).map((book) => book.id)).toEqual([
-      'book-2',
-    ]);
-    expect(filterBooks(sampleBooks, { q: 'teknologi' }).map((book) => book.id)).toEqual([
-      'book-2',
-    ]);
+    expect(
+      filterBooks(sampleBooks, { q: 'BUMI' }).map((book) => book.id),
+    ).toEqual(['book-1']);
+    expect(
+      filterBooks(sampleBooks, { q: 'robert' }).map((book) => book.id),
+    ).toEqual(['book-2']);
+    expect(
+      filterBooks(sampleBooks, { q: 'teknologi' }).map((book) => book.id),
+    ).toEqual(['book-2']);
   });
 
   test('author and genre filters are combined', () => {
@@ -79,25 +79,33 @@ describe('Master Buku frontend helpers', () => {
   });
 
   test('cover accepts PNG/JPG/JPEG within the shared maximum size', () => {
-    expect(getCoverValidationMessage(coverFile('cover.png', 'image/png', 5 * 1024 * 1024))).toBe(
-      null,
-    );
-    expect(getCoverValidationMessage(coverFile('cover.jpg', 'image/jpeg', 1024))).toBe(null);
-    expect(getCoverValidationMessage(coverFile('cover.jpeg', 'image/jpeg', 1024))).toBe(null);
+    expect(
+      getCoverValidationMessage(
+        coverFile('cover.png', 'image/png', 5 * 1024 * 1024),
+      ),
+    ).toBe(null);
+    expect(
+      getCoverValidationMessage(coverFile('cover.jpg', 'image/jpeg', 1024)),
+    ).toBe(null);
+    expect(
+      getCoverValidationMessage(coverFile('cover.jpeg', 'image/jpeg', 1024)),
+    ).toBe(null);
   });
 
   test('cover rejects an unsupported extension or MIME type', () => {
-    expect(getCoverValidationMessage(coverFile('cover.gif', 'image/gif', 1024))).toBe(
-      'Format file cover buku tidak sesuai',
-    );
-    expect(getCoverValidationMessage(coverFile('cover.jpg', 'image/gif', 1024))).toBe(
-      'Format file cover buku tidak sesuai',
-    );
+    expect(
+      getCoverValidationMessage(coverFile('cover.gif', 'image/gif', 1024)),
+    ).toBe('Format file cover buku tidak sesuai');
+    expect(
+      getCoverValidationMessage(coverFile('cover.jpg', 'image/gif', 1024)),
+    ).toBe('Format file cover buku tidak sesuai');
   });
 
   test('cover rejects a file larger than five MiB', () => {
     expect(
-      getCoverValidationMessage(coverFile('cover.jpg', 'image/jpeg', 5 * 1024 * 1024 + 1)),
+      getCoverValidationMessage(
+        coverFile('cover.jpg', 'image/jpeg', 5 * 1024 * 1024 + 1),
+      ),
     ).toBe('Ukuran file cover buku tidak boleh lebih dari 5Mb');
   });
 
@@ -108,7 +116,11 @@ describe('Master Buku frontend helpers', () => {
       status: 'inactive',
     };
 
-    expect(getGenreIdsForSubmit('genre-old', [inactiveGenre])).toEqual(['genre-old']);
-    expect(getGenreIdsForSubmit('genre-fiksi', [inactiveGenre])).toEqual(['genre-fiksi']);
+    expect(getGenreIdsForSubmit('genre-old', [inactiveGenre])).toEqual([
+      'genre-old',
+    ]);
+    expect(getGenreIdsForSubmit('genre-fiksi', [inactiveGenre])).toEqual([
+      'genre-fiksi',
+    ]);
   });
 });

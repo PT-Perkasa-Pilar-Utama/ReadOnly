@@ -3,11 +3,11 @@ import { useNavigate } from '@tanstack/solid-router';
 import { createEffect, createSignal, For, onCleanup, Show } from 'solid-js';
 import {
   ADMIN_LOAN_STATUSES,
+  type AdminLoanStatus,
   formatLoanDate,
   getAdminLoans,
   getLoanStatusClass,
   getLoanStatusLabel,
-  type AdminLoanStatus,
 } from '../../api/loans';
 import { AdminHeader } from '../../components/AdminHeader';
 import './LoanManagementPage.css';
@@ -21,7 +21,9 @@ export function LoanManagementPage() {
   const [searchText, setSearchText] = createSignal('');
   const [debouncedSearch, setDebouncedSearch] = createSignal('');
   const [selectedStatus, setSelectedStatus] = createSignal('');
-  const [appliedStatus, setAppliedStatus] = createSignal<AdminLoanStatus | ''>('');
+  const [appliedStatus, setAppliedStatus] = createSignal<AdminLoanStatus | ''>(
+    '',
+  );
   const [page, setPage] = createSignal(1);
 
   createEffect(() => {
@@ -35,9 +37,15 @@ export function LoanManagementPage() {
     setPage(1);
   });
 
-  
   const loansQuery = createQuery(() => ({
-    queryKey: ['admin', 'loans', 'list', debouncedSearch(), appliedStatus(), page()],
+    queryKey: [
+      'admin',
+      'loans',
+      'list',
+      debouncedSearch(),
+      appliedStatus(),
+      page(),
+    ],
     queryFn: ({ signal }) => {
       const search = debouncedSearch();
       const status = appliedStatus();
@@ -56,7 +64,6 @@ export function LoanManagementPage() {
     refetchOnWindowFocus: true,
   }));
 
-
   function applyFilters() {
     setAppliedStatus(selectedStatus() as AdminLoanStatus | '');
     setPage(1);
@@ -69,7 +76,10 @@ export function LoanManagementPage() {
     const total = totalPages();
     const current = currentPage();
     const start = Math.max(1, Math.min(current - 2, total - 4));
-    return Array.from({ length: Math.min(5, total) }, (_, index) => start + index);
+    return Array.from(
+      { length: Math.min(5, total) },
+      (_, index) => start + index,
+    );
   };
 
   return (
@@ -101,12 +111,16 @@ export function LoanManagementPage() {
               <span>Status</span>
               <select
                 value={selectedStatus()}
-                onChange={(event) => setSelectedStatus(event.currentTarget.value)}
+                onChange={(event) =>
+                  setSelectedStatus(event.currentTarget.value)
+                }
                 aria-label="Filter status peminjaman"
               >
                 <option value="">Semua Status</option>
                 <For each={ADMIN_LOAN_STATUSES}>
-                  {(status) => <option value={status}>{getLoanStatusLabel(status)}</option>}
+                  {(status) => (
+                    <option value={status}>{getLoanStatusLabel(status)}</option>
+                  )}
                 </For>
               </select>
             </label>
@@ -122,13 +136,20 @@ export function LoanManagementPage() {
           </div>
 
           <Show when={loansQuery.isPending}>
-            <div class="loan-management-state" aria-live="polite" aria-busy="true">
+            <div
+              class="loan-management-state"
+              aria-live="polite"
+              aria-busy="true"
+            >
               <span class="loan-management-loader" aria-hidden="true" />
             </div>
           </Show>
 
           <Show when={loansQuery.isError}>
-            <div class="loan-management-state loan-management-state--error" role="alert">
+            <div
+              class="loan-management-state loan-management-state--error"
+              role="alert"
+            >
               {getErrorMessage(loansQuery.error)}
             </div>
           </Show>
@@ -167,7 +188,10 @@ export function LoanManagementPage() {
                                   when={loan.book_cover_url}
                                   fallback={<span aria-hidden="true">▤</span>}
                                 >
-                                  <img src={loan.book_cover_url ?? ''} alt={`Cover ${loan.book_title}`} />
+                                  <img
+                                    src={loan.book_cover_url ?? ''}
+                                    alt={`Cover ${loan.book_title}`}
+                                  />
                                 </Show>
                               </div>
                               <div class="loan-book-meta">
@@ -180,8 +204,13 @@ export function LoanManagementPage() {
                           <td>{formatLoanDate(loan.confirmed_at)}</td>
                           <td>{formatLoanDate(loan.due_date)}</td>
                           <td>
-                            <span class={`loan-status-badge ${getLoanStatusClass(loan.status)}`}>
-                              {getLoanStatusLabel(loan.status, loan.status_label)}
+                            <span
+                              class={`loan-status-badge ${getLoanStatusClass(loan.status)}`}
+                            >
+                              {getLoanStatusLabel(
+                                loan.status,
+                                loan.status_label,
+                              )}
                             </span>
                           </td>
                           <td>
@@ -213,9 +242,13 @@ export function LoanManagementPage() {
 
             <div class="loan-management-footer">
               <p>
-                Menampilkan {loansQuery.data?.loans.length ?? 0} dari {totalLoans()} peminjaman
+                Menampilkan {loansQuery.data?.loans.length ?? 0} dari{' '}
+                {totalLoans()} peminjaman
               </p>
-              <nav class="loan-management-pagination" aria-label="Paginasi daftar peminjaman">
+              <nav
+                class="loan-management-pagination"
+                aria-label="Paginasi daftar peminjaman"
+              >
                 <button
                   type="button"
                   aria-label="Halaman sebelumnya"
@@ -230,7 +263,9 @@ export function LoanManagementPage() {
                       type="button"
                       classList={{ 'is-current': pageNumber === currentPage() }}
                       aria-label={`Halaman ${pageNumber}`}
-                      aria-current={pageNumber === currentPage() ? 'page' : undefined}
+                      aria-current={
+                        pageNumber === currentPage() ? 'page' : undefined
+                      }
                       onClick={() => setPage(pageNumber)}
                     >
                       {pageNumber}
@@ -241,7 +276,9 @@ export function LoanManagementPage() {
                   type="button"
                   aria-label="Halaman berikutnya"
                   disabled={totalPages() === 0 || currentPage() >= totalPages()}
-                  onClick={() => setPage((value) => Math.min(totalPages(), value + 1))}
+                  onClick={() =>
+                    setPage((value) => Math.min(totalPages(), value + 1))
+                  }
                 >
                   ›
                 </button>

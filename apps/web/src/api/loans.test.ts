@@ -22,7 +22,9 @@ describe('Manajemen Peminjaman frontend helpers', () => {
     expect(getLoanStatusLabel('OVERDUE')).toBe('Terlambat');
     expect(getLoanStatusLabel('RETURN_PENDING')).toBe('Pending Pengembalian');
     expect(getLoanStatusLabel('FINE_PENDING')).toBe('Pending Keterlambatan');
-    expect(getLoanStatusLabel('BORROWED', 'Sedang Dipinjam')).toBe('Sedang Dipinjam');
+    expect(getLoanStatusLabel('BORROWED', 'Sedang Dipinjam')).toBe(
+      'Sedang Dipinjam',
+    );
   });
 
   test('format denda tidak mengarang nominal ketika nilai null', () => {

@@ -21,7 +21,10 @@ describe('Admin feedback store', () => {
   });
 
   test('keeps exact error messages available to the modal', () => {
-    showAdminFeedback('Buku tidak dapat dihapus karena masih dipinjam', 'error');
+    showAdminFeedback(
+      'Buku tidak dapat dihapus karena masih dipinjam',
+      'error',
+    );
 
     expect(getAdminFeedback()()?.message).toBe(
       'Buku tidak dapat dihapus karena masih dipinjam',

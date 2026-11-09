@@ -7,11 +7,11 @@ import {
   getAdminGenres,
 } from '../../api/books';
 import { ApiRequestError } from '../../api/client';
+import { AdminHeader } from '../../components/AdminHeader';
 import {
   requestAdminConfirmation,
   showAdminFeedback,
 } from '../../components/admin-feedback-store';
-import { AdminHeader } from '../../components/AdminHeader';
 import './MasterBooksPage.css';
 
 const numberFormatter = new Intl.NumberFormat('id-ID');
@@ -83,7 +83,9 @@ export function MasterBooksPage() {
     try {
       await deleteAdminBook(bookId);
       showAdminFeedback('Buku berhasil dihapus', 'success');
-      await queryClient.invalidateQueries({ queryKey: ['admin', 'books', 'list'] });
+      await queryClient.invalidateQueries({
+        queryKey: ['admin', 'books', 'list'],
+      });
     } catch (error) {
       const message =
         error instanceof ApiRequestError &&
@@ -109,7 +111,10 @@ export function MasterBooksPage() {
     const total = totalPages();
     const current = currentPage();
     const start = Math.max(1, Math.min(current - 2, total - 4));
-    return Array.from({ length: Math.min(5, total) }, (_, index) => start + index);
+    return Array.from(
+      { length: Math.min(5, total) },
+      (_, index) => start + index,
+    );
   };
 
   return (
@@ -151,7 +156,9 @@ export function MasterBooksPage() {
               <span>Author</span>
               <select
                 value={selectedAuthor()}
-                onChange={(event) => setSelectedAuthor(event.currentTarget.value)}
+                onChange={(event) =>
+                  setSelectedAuthor(event.currentTarget.value)
+                }
                 aria-label="Filter Author"
               >
                 <option value="">All Authors</option>
@@ -165,7 +172,9 @@ export function MasterBooksPage() {
               <span>Genre</span>
               <select
                 value={selectedGenre()}
-                onChange={(event) => setSelectedGenre(event.currentTarget.value)}
+                onChange={(event) =>
+                  setSelectedGenre(event.currentTarget.value)
+                }
                 aria-label="Filter Genre"
               >
                 <option value="">Semua Genre</option>
@@ -198,7 +207,10 @@ export function MasterBooksPage() {
           </Show>
 
           <Show when={booksQuery.isError}>
-            <div class="master-books-state master-books-state--error" role="alert">
+            <div
+              class="master-books-state master-books-state--error"
+              role="alert"
+            >
               {getErrorMessage(booksQuery.error)}
             </div>
           </Show>
@@ -238,7 +250,10 @@ export function MasterBooksPage() {
                                 when={book.cover_url}
                                 fallback={<span aria-hidden="true">▤</span>}
                               >
-                                <img src={book.cover_url ?? ''} alt={`Cover ${book.title}`} />
+                                <img
+                                  src={book.cover_url ?? ''}
+                                  alt={`Cover ${book.title}`}
+                                />
                               </Show>
                             </div>
                           </td>
@@ -262,7 +277,8 @@ export function MasterBooksPage() {
                           </td>
                           <td>
                             <span class="master-books-availability">
-                              {numberFormatter.format(book.available_count)} tersedia
+                              {numberFormatter.format(book.available_count)}{' '}
+                              tersedia
                             </span>
                           </td>
                           <td>
@@ -290,7 +306,9 @@ export function MasterBooksPage() {
                                 aria-label={`Hapus ${book.title}`}
                                 title="Hapus"
                                 disabled={deletingBookId() === book.id}
-                                onClick={() => void handleDelete(book.id, book.title)}
+                                onClick={() =>
+                                  void handleDelete(book.id, book.title)
+                                }
                               >
                                 <svg viewBox="0 0 20 20" aria-hidden="true">
                                   <path d="M4 5.5h12M7.2 5.5V3.8h5.6v1.7m-7.2 0 .7 10.8h6.9l.7-10.8M8 8.2v5.5m4-5.5v5.5" />
@@ -311,7 +329,10 @@ export function MasterBooksPage() {
                 Menampilkan {booksQuery.data?.books.length ?? 0} dari{' '}
                 {numberFormatter.format(totalBooks())} buku
               </p>
-              <nav class="master-books-pagination" aria-label="Paginasi daftar buku">
+              <nav
+                class="master-books-pagination"
+                aria-label="Paginasi daftar buku"
+              >
                 <button
                   type="button"
                   aria-label="Halaman sebelumnya"
@@ -326,7 +347,9 @@ export function MasterBooksPage() {
                       type="button"
                       classList={{ 'is-current': pageNumber === currentPage() }}
                       aria-label={`Halaman ${pageNumber}`}
-                      aria-current={pageNumber === currentPage() ? 'page' : undefined}
+                      aria-current={
+                        pageNumber === currentPage() ? 'page' : undefined
+                      }
                       onClick={() => setPage(pageNumber)}
                     >
                       {pageNumber}
@@ -337,7 +360,9 @@ export function MasterBooksPage() {
                   type="button"
                   aria-label="Halaman berikutnya"
                   disabled={totalPages() === 0 || currentPage() >= totalPages()}
-                  onClick={() => setPage((value) => Math.min(totalPages(), value + 1))}
+                  onClick={() =>
+                    setPage((value) => Math.min(totalPages(), value + 1))
+                  }
                 >
                   ›
                 </button>

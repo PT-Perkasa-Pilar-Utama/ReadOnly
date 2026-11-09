@@ -1,6 +1,6 @@
 import {
-  LOAN_STATUS_LABELS,
   type FineStatus,
+  LOAN_STATUS_LABELS,
   type LoanStatus,
   type Pagination,
 } from '@readonly/shared';
@@ -182,8 +182,10 @@ function createLocalLoanFixture(input: {
       late_days: input.lateDays,
       fine_amount: input.fineAmount,
       fine_status: input.fineStatus,
-      can_pay_fine: input.status === 'FINE_PENDING' && input.fineStatus === 'Belum Bayar',
-      can_confirm_return: input.status === 'RETURN_PENDING' ||
+      can_pay_fine:
+        input.status === 'FINE_PENDING' && input.fineStatus === 'Belum Bayar',
+      can_confirm_return:
+        input.status === 'RETURN_PENDING' ||
         (input.status === 'FINE_PENDING' && input.fineStatus === 'Sudah Bayar'),
     },
   };
@@ -215,7 +217,8 @@ const LOCAL_LOAN_FIXTURES: LocalLoanFixture[] = [
     author: 'Henry Manampiring',
     publisher: 'Kompas',
     publicationYear: 2018,
-    synopsis: 'Buku C dengan keterlambatan 1 hari (batas bawah denda otomatis).',
+    synopsis:
+      'Buku C dengan keterlambatan 1 hari (batas bawah denda otomatis).',
     genres: ['Bisnis'],
     status: 'OVERDUE',
     lateDays: 1,
@@ -263,7 +266,8 @@ const LOCAL_LOAN_FIXTURES: LocalLoanFixture[] = [
     author: 'Martin Fowler',
     publisher: 'Addison-Wesley',
     publicationYear: 2018,
-    synopsis: 'Buku F dengan keterlambatan 6 hari (di atas 5 hari denda manual).',
+    synopsis:
+      'Buku F dengan keterlambatan 6 hari (di atas 5 hari denda manual).',
     genres: ['Teknologi'],
     status: 'OVERDUE',
     lateDays: 6,
@@ -296,7 +300,8 @@ const LOCAL_LOAN_FIXTURES: LocalLoanFixture[] = [
     author: 'Leila S. Chudori',
     publisher: 'KPG',
     publicationYear: 2017,
-    synopsis: 'Buku H berstatus Pending Keterlambatan (FINE_PENDING, Belum Bayar).',
+    synopsis:
+      'Buku H berstatus Pending Keterlambatan (FINE_PENDING, Belum Bayar).',
     genres: ['Fiksi'],
     status: 'FINE_PENDING',
     lateDays: 5,
@@ -347,7 +352,8 @@ const LOCAL_LOAN_FIXTURES: LocalLoanFixture[] = [
     author: 'Dee Lestari',
     publisher: 'Bentang Pustaka',
     publicationYear: 2009,
-    synopsis: 'Buku K yang sudah dikembalikan terlambat (pieChart.late) dan memakai genre nonaktif.',
+    synopsis:
+      'Buku K yang sudah dikembalikan terlambat (pieChart.late) dan memakai genre nonaktif.',
     genres: ['Ensiklopedia Lama'],
     status: 'RETURNED',
     lateDays: 3,
@@ -361,7 +367,11 @@ const LOCAL_LOAN_FIXTURES: LocalLoanFixture[] = [
 export const isAdminLoansUsingLocalFixtures =
   import.meta.env?.DEV && import.meta.env?.VITE_LOANS_DATA_SOURCE !== 'api';
 
-function createPagination(page: number, limit: number, total: number): Pagination {
+function createPagination(
+  page: number,
+  limit: number,
+  total: number,
+): Pagination {
   return {
     page,
     limit,
@@ -406,7 +416,10 @@ export async function getAdminLoans(
     };
   }
 
-  const searchParams = new URLSearchParams({ page: String(page), limit: String(limit) });
+  const searchParams = new URLSearchParams({
+    page: String(page),
+    limit: String(limit),
+  });
   if (query.status) searchParams.set('status', query.status);
   if (query.q?.trim()) searchParams.set('q', query.q.trim());
 
@@ -415,10 +428,13 @@ export async function getAdminLoans(
     signal,
   );
 
-  const loans = response.data.filter((loan) => (loan.status as LoanStatus) !== 'PENDING');
+  const loans = response.data.filter(
+    (loan) => (loan.status as LoanStatus) !== 'PENDING',
+  );
   return {
     loans,
-    pagination: response.pagination ?? createPagination(page, limit, loans.length),
+    pagination:
+      response.pagination ?? createPagination(page, limit, loans.length),
   };
 }
 
@@ -427,7 +443,9 @@ export async function getAdminLoanDetail(
   signal?: AbortSignal,
 ): Promise<AdminLoanDetail> {
   if (isAdminLoansUsingLocalFixtures) {
-    const fixture = LOCAL_LOAN_FIXTURES.find((item) => item.detail.id === loanId);
+    const fixture = LOCAL_LOAN_FIXTURES.find(
+      (item) => item.detail.id === loanId,
+    );
     if (!fixture) {
       throw new ApiRequestError(404, 'not_found', 'not_found');
     }
@@ -441,7 +459,10 @@ export async function getAdminLoanDetail(
   return response.data;
 }
 
-export function getLoanStatusLabel(status: AdminLoanStatus, apiLabel?: string): string {
+export function getLoanStatusLabel(
+  status: AdminLoanStatus,
+  apiLabel?: string,
+): string {
   return apiLabel?.trim() || LOAN_STATUS_LABELS[status];
 }
 
@@ -450,16 +471,16 @@ export function getLoanStatusClass(status: AdminLoanStatus): string {
 }
 
 export function formatLoanAmount(amount: number | null): string {
-  return amount === null ? '-' : `Rp ${new Intl.NumberFormat('id-ID').format(amount)}`;
+  return amount === null
+    ? '-'
+    : `Rp ${new Intl.NumberFormat('id-ID').format(amount)}`;
 }
 
 export function formatLoanDate(value: string | null): string {
   if (!value) return '-';
 
   const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
-  const date = dateOnly
-    ? new Date(`${value}T00:00:00+07:00`)
-    : new Date(value);
+  const date = dateOnly ? new Date(`${value}T00:00:00+07:00`) : new Date(value);
 
   if (Number.isNaN(date.getTime())) return '-';
 

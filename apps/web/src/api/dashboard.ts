@@ -43,7 +43,11 @@ function isDashboardSummary(value: unknown): value is DashboardSummary {
   const summary = value as Record<string, unknown>;
   const pieChart = summary.pieChart;
 
-  if (typeof pieChart !== 'object' || pieChart === null || Array.isArray(pieChart)) {
+  if (
+    typeof pieChart !== 'object' ||
+    pieChart === null ||
+    Array.isArray(pieChart)
+  ) {
     return false;
   }
 
@@ -60,7 +64,9 @@ function isDashboardSummary(value: unknown): value is DashboardSummary {
   );
 }
 
-export async function getDashboardSummary(signal?: AbortSignal): Promise<DashboardSummary> {
+export async function getDashboardSummary(
+  signal?: AbortSignal,
+): Promise<DashboardSummary> {
   if (USE_LOCAL_DASHBOARD_FIXTURE) {
     return {
       ...LOCAL_DASHBOARD_FIXTURE,

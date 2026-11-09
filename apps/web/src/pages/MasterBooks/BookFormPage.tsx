@@ -2,22 +2,20 @@ import { createQuery, useQueryClient } from '@tanstack/solid-query';
 import { useNavigate } from '@tanstack/solid-router';
 import { createEffect, createSignal, For, onCleanup, Show } from 'solid-js';
 import {
+  type BookGenre,
   createAdminBook,
   getAdminBook,
   getAdminGenres,
   getCoverValidationMessage,
   getGenreIdsForSubmit,
   updateAdminBook,
-  type BookGenre,
 } from '../../api/books';
 import { ApiRequestError } from '../../api/client';
-import { showAdminFeedback } from '../../components/admin-feedback-store';
 import { AdminHeader } from '../../components/AdminHeader';
+import { showAdminFeedback } from '../../components/admin-feedback-store';
 import './MasterBooksPage.css';
 
-type BookFormPageProps =
-  | { mode: 'create' }
-  | { mode: 'edit'; bookId: string };
+type BookFormPageProps = { mode: 'create' } | { mode: 'edit'; bookId: string };
 
 type BookField =
   | 'cover'
@@ -67,8 +65,12 @@ export function BookFormPage(props: BookFormPageProps) {
   const [selectedGenreId, setSelectedGenreId] = createSignal('');
   const [originalGenres, setOriginalGenres] = createSignal<BookGenre[]>([]);
   const [selectedCover, setSelectedCover] = createSignal<File | null>(null);
-  const [coverPreviewUrl, setCoverPreviewUrl] = createSignal<string | null>(null);
-  const [existingCoverUrl, setExistingCoverUrl] = createSignal<string | null>(null);
+  const [coverPreviewUrl, setCoverPreviewUrl] = createSignal<string | null>(
+    null,
+  );
+  const [existingCoverUrl, setExistingCoverUrl] = createSignal<string | null>(
+    null,
+  );
   const [fieldErrors, setFieldErrors] = createSignal<BookFieldErrors>({});
   const [formError, setFormError] = createSignal('');
   const [isSubmitting, setIsSubmitting] = createSignal(false);
@@ -146,7 +148,10 @@ export function BookFormPage(props: BookFormPageProps) {
     if (!title().trim()) errors.title = REQUIRED_FIELD_MESSAGE;
     if (!author().trim()) errors.author = REQUIRED_FIELD_MESSAGE;
     if (!publisher().trim()) errors.publisher = REQUIRED_FIELD_MESSAGE;
-    if (!publicationYear().trim() || !Number.isInteger(Number(publicationYear()))) {
+    if (
+      !publicationYear().trim() ||
+      !Number.isInteger(Number(publicationYear()))
+    ) {
       errors.publication_year = REQUIRED_FIELD_MESSAGE;
     }
     if (!synopsis().trim()) errors.synopsis = REQUIRED_FIELD_MESSAGE;
@@ -188,7 +193,10 @@ export function BookFormPage(props: BookFormPageProps) {
       return;
     }
 
-    if (error.message === COVER_FORMAT_MESSAGE || error.message === COVER_SIZE_MESSAGE) {
+    if (
+      error.message === COVER_FORMAT_MESSAGE ||
+      error.message === COVER_SIZE_MESSAGE
+    ) {
       setFieldError('cover', error.message);
       showAdminFeedback(error.message, 'error');
       return;
@@ -231,10 +239,14 @@ export function BookFormPage(props: BookFormPageProps) {
         await updateAdminBook(props.bookId, payload);
       }
 
-      await queryClient.invalidateQueries({ queryKey: ['admin', 'books', 'list'] });
+      await queryClient.invalidateQueries({
+        queryKey: ['admin', 'books', 'list'],
+      });
       await navigate({ to: '/admin/books' });
       showAdminFeedback(
-        props.mode === 'create' ? 'Buku berhasil ditambahkan' : 'Buku berhasil diubah',
+        props.mode === 'create'
+          ? 'Buku berhasil ditambahkan'
+          : 'Buku berhasil diubah',
         'success',
       );
     } catch (error) {
@@ -248,7 +260,8 @@ export function BookFormPage(props: BookFormPageProps) {
     genresQuery.isPending ||
     (props.mode === 'edit' &&
       (bookQuery.isPending || (!bookQuery.isError && !isInitialized())));
-  const isPageError = () => genresQuery.isError || (props.mode === 'edit' && bookQuery.isError);
+  const isPageError = () =>
+    genresQuery.isError || (props.mode === 'edit' && bookQuery.isError);
   const currentCover = () => coverPreviewUrl() ?? existingCoverUrl();
 
   return (
@@ -265,7 +278,11 @@ export function BookFormPage(props: BookFormPageProps) {
         <section class="master-books-heading master-books-heading--form">
           <div>
             <h1>{props.mode === 'create' ? 'Tambah Buku' : 'Edit Buku'}</h1>
-            <p class="master-books-subtitle">{props.mode === 'create' ? 'Tambahkan data buku ke perpustakaan' : 'Perbarui informasi buku perpustakaan'}</p>
+            <p class="master-books-subtitle">
+              {props.mode === 'create'
+                ? 'Tambahkan data buku ke perpustakaan'
+                : 'Perbarui informasi buku perpustakaan'}
+            </p>
           </div>
         </section>
 
@@ -276,7 +293,10 @@ export function BookFormPage(props: BookFormPageProps) {
         </Show>
 
         <Show when={isPageError()}>
-          <div class="master-books-state master-books-state--error" role="alert">
+          <div
+            class="master-books-state master-books-state--error"
+            role="alert"
+          >
             {genresQuery.isError
               ? genresQuery.error.message
               : bookQuery.error instanceof Error
@@ -288,7 +308,10 @@ export function BookFormPage(props: BookFormPageProps) {
         <Show when={!isLoading() && !isPageError()}>
           <form class="master-books-form" onSubmit={handleSubmit}>
             <div class="master-books-form__layout">
-              <section class="master-books-cover-section" aria-labelledby="cover-label">
+              <section
+                class="master-books-cover-section"
+                aria-labelledby="cover-label"
+              >
                 <p id="cover-label" class="master-books-form-label">
                   Upload Cover Buku
                   <Show when={props.mode === 'create'}>
@@ -309,7 +332,10 @@ export function BookFormPage(props: BookFormPageProps) {
                     when={currentCover()}
                     fallback={
                       <span class="master-books-cover-placeholder">
-                        <span class="master-books-cover-placeholder__icon" aria-hidden="true">
+                        <span
+                          class="master-books-cover-placeholder__icon"
+                          aria-hidden="true"
+                        >
                           ⇧
                         </span>
                         <strong>Upload cover buku</strong>
@@ -341,10 +367,15 @@ export function BookFormPage(props: BookFormPageProps) {
                     value={title()}
                     onInput={(event) => setTitle(event.currentTarget.value)}
                     aria-invalid={Boolean(fieldErrors().title)}
-                    aria-describedby={fieldErrors().title ? 'book-title-error' : undefined}
+                    aria-describedby={
+                      fieldErrors().title ? 'book-title-error' : undefined
+                    }
                   />
                   <Show when={fieldErrors().title}>
-                    <small id="book-title-error" class="master-books-field-error">
+                    <small
+                      id="book-title-error"
+                      class="master-books-field-error"
+                    >
                       {fieldErrors().title}
                     </small>
                   </Show>
@@ -361,7 +392,9 @@ export function BookFormPage(props: BookFormPageProps) {
                     aria-invalid={Boolean(fieldErrors().author)}
                   />
                   <Show when={fieldErrors().author}>
-                    <small class="master-books-field-error">{fieldErrors().author}</small>
+                    <small class="master-books-field-error">
+                      {fieldErrors().author}
+                    </small>
                   </Show>
                 </label>
 
@@ -376,7 +409,9 @@ export function BookFormPage(props: BookFormPageProps) {
                     aria-invalid={Boolean(fieldErrors().publisher)}
                   />
                   <Show when={fieldErrors().publisher}>
-                    <small class="master-books-field-error">{fieldErrors().publisher}</small>
+                    <small class="master-books-field-error">
+                      {fieldErrors().publisher}
+                    </small>
                   </Show>
                 </label>
 
@@ -389,7 +424,9 @@ export function BookFormPage(props: BookFormPageProps) {
                     inputMode="numeric"
                     step="1"
                     value={publicationYear()}
-                    onInput={(event) => setPublicationYear(event.currentTarget.value)}
+                    onInput={(event) =>
+                      setPublicationYear(event.currentTarget.value)
+                    }
                     aria-invalid={Boolean(fieldErrors().publication_year)}
                   />
                   <Show when={fieldErrors().publication_year}>
@@ -405,17 +442,25 @@ export function BookFormPage(props: BookFormPageProps) {
                   </span>
                   <select
                     value={selectedGenreId()}
-                    onChange={(event) => setSelectedGenreId(event.currentTarget.value)}
+                    onChange={(event) =>
+                      setSelectedGenreId(event.currentTarget.value)
+                    }
                     aria-invalid={Boolean(fieldErrors().genre)}
                   >
                     <option value="">Pilih Genre</option>
                     <Show
                       when={
                         props.mode === 'edit' &&
-                        originalGenres().some((genre) => genre.status === 'inactive')
+                        originalGenres().some(
+                          (genre) => genre.status === 'inactive',
+                        )
                       }
                     >
-                      <For each={originalGenres().filter((genre) => genre.status === 'inactive')}>
+                      <For
+                        each={originalGenres().filter(
+                          (genre) => genre.status === 'inactive',
+                        )}
+                      >
                         {(genre) => (
                           <option value={genre.id} disabled>
                             {genre.name} (Nonaktif)
@@ -424,11 +469,15 @@ export function BookFormPage(props: BookFormPageProps) {
                       </For>
                     </Show>
                     <For each={genresQuery.data ?? []}>
-                      {(genre) => <option value={genre.id}>{genre.name}</option>}
+                      {(genre) => (
+                        <option value={genre.id}>{genre.name}</option>
+                      )}
                     </For>
                   </select>
                   <Show when={fieldErrors().genre}>
-                    <small class="master-books-field-error">{fieldErrors().genre}</small>
+                    <small class="master-books-field-error">
+                      {fieldErrors().genre}
+                    </small>
                   </Show>
                 </label>
 
@@ -443,13 +492,16 @@ export function BookFormPage(props: BookFormPageProps) {
                     aria-invalid={Boolean(fieldErrors().synopsis)}
                   />
                   <Show when={fieldErrors().synopsis}>
-                    <small class="master-books-field-error">{fieldErrors().synopsis}</small>
+                    <small class="master-books-field-error">
+                      {fieldErrors().synopsis}
+                    </small>
                   </Show>
                 </label>
 
                 <label class="master-books-form-field master-books-form-field--full">
                   <span class="master-books-form-label">
-                    Jumlah Ketersediaan <span class="master-books-required">*</span>
+                    Jumlah Ketersediaan{' '}
+                    <span class="master-books-required">*</span>
                   </span>
                   <input
                     type="number"
@@ -457,7 +509,9 @@ export function BookFormPage(props: BookFormPageProps) {
                     min="0"
                     step="1"
                     value={availableCount()}
-                    onInput={(event) => setAvailableCount(event.currentTarget.value)}
+                    onInput={(event) =>
+                      setAvailableCount(event.currentTarget.value)
+                    }
                     aria-invalid={Boolean(fieldErrors().available_count)}
                   />
                   <Show when={fieldErrors().available_count}>
@@ -470,7 +524,10 @@ export function BookFormPage(props: BookFormPageProps) {
             </div>
 
             <Show when={formError()}>
-              <div class="master-books-alert master-books-alert--error" role="alert">
+              <div
+                class="master-books-alert master-books-alert--error"
+                role="alert"
+              >
                 {formError()}
               </div>
             </Show>
