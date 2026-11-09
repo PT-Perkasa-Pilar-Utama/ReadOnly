@@ -35,21 +35,27 @@ export function LoanManagementPage() {
     setPage(1);
   });
 
+  
   const loansQuery = createQuery(() => ({
     queryKey: ['admin', 'loans', 'list', debouncedSearch(), appliedStatus(), page()],
-    queryFn: ({ signal }) =>
-      getAdminLoans(
+    queryFn: ({ signal }) => {
+      const search = debouncedSearch();
+      const status = appliedStatus();
+
+      return getAdminLoans(
         {
-          ...(debouncedSearch() ? { q: debouncedSearch() } : {}),
-          ...(appliedStatus() ? { status: appliedStatus() } : {}),
+          ...(search ? { q: search } : {}),
+          ...(status !== '' ? { status } : {}),
           page: page(),
           limit: 10,
         },
         signal,
-      ),
+      );
+    },
     refetchInterval: 60_000,
     refetchOnWindowFocus: true,
   }));
+
 
   function applyFilters() {
     setAppliedStatus(selectedStatus() as AdminLoanStatus | '');

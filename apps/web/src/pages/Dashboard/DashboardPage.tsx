@@ -88,7 +88,6 @@ export function DashboardPage() {
                 class="dashboard-scan-button__icon"
                 viewBox="0 0 20 20"
                 aria-hidden="true"
-                focusable="false"
               >
                 <path d="M2 2h6v6H2zM12 2h6v6h-6zM2 12h6v6H2z" />
                 <path d="M13 12h2v2h-2zM17 12v2M12 17h2M16 16h2v2h-2z" />
