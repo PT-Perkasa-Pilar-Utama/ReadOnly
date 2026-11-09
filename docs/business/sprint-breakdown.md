@@ -50,4 +50,4 @@ Skenario di atas 8 SP wajib dipecah. Kapasitas Development adalah `5 hari kerja 
 
 ## Batas dokumen lama
 
-File AC breakdown Sprint 1–3 dan task cards Sprint 1–3 adalah artefak alokasi/estimasi engineering lama untuk 50 AC. File tersebut dipertahankan sebagai referensi historis dan traceability, bukan jadwal aktif atau komitmen scope. Lihat [indeks AC](acceptance-criteria.md), [task breakdown lama](../task-breakdown/_index.md), dan [catatan timeline PM](../decisions/2026-11-08-pm-sprint-timeline.md).
+File AC breakdown Sprint 1–3 tetap terpisah sebagai traceability historis. Task cards yang sebelumnya dibagi ke tiga file kini terkonsolidasi dalam satu [`sprint-1.md`](../task-breakdown/sprint-1.md), dengan tiga kelompok alokasi lama. Kelompok dan estimasinya bukan jadwal aktif atau komitmen scope. Lihat [indeks AC](acceptance-criteria.md), [task breakdown](../task-breakdown/_index.md), dan [catatan timeline PM](../decisions/2026-11-08-pm-sprint-timeline.md).

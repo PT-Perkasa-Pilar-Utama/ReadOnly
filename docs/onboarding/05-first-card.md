@@ -6,14 +6,14 @@
 
 # First Card
 
-Scaffold minimal `TL-S1-01` sudah selesai. Kartu dan urutan kerja aktif dibentuk saat Sprint Planning; task cards Sprint 1–3 di bawah ini adalah baseline historis, bukan backlog aktif.
+Scaffold minimal `TL-S1-01` sudah selesai. Seluruh task cards sekarang berada di satu file, [`sprint-1.md`](../task-breakdown/sprint-1.md), dalam tiga kelompok alokasi historis dengan prefix ID asal tetap dipakai. Kartu dan PIC yang aktif dipilih saat Sprint Planning.
 
-Urutan kartu Sprint 1 historis setelah scaffold:
+Contoh kartu pada kelompok pertama:
 
 - BE: register, login/session, Master Buku.
 - FE: shell, register UI, login UI, Master Buku UI, wiring.
 
-Pilih kartu yang owner-nya sesuai peran Anda. Jangan ambil wiring sebelum dependensi selesai.
+Owner pada kartu menjadi acuan awal. Jangan menganggap kelompok historis sebagai komitmen sprint; jangan ambil wiring sebelum dependensi selesai.
 
 ## Cross-References
 

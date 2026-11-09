@@ -16,7 +16,7 @@
 | BE1 | Backend | Kartu BE: auth, books, loans, jobs, notifications, dashboard |
 | FE1 | Frontend | Kartu FE: semua halaman + komponen + wiring |
 
-- Nama asli: **Tidak diketahui** (P-07).
+- PIC per kartu tercantum pada kolom Owner di [task breakdown terpadu](sprint-1.md); dokumen teknis lain menggunakan peran (P-07).
 - Kartu scaffold dan DB dipegang TL.
 - Kartu wiring BE diselesaikan BE terakhir.
 
@@ -81,6 +81,6 @@ Seed per sprint 12.0–15.0 dev-day ÷ kartu rata-rata 1.25–1.75 hari = 7–12
 
 ## Cross-References
 
-- [sprint-1.md](sprint-1.md), [sprint-2.md](sprint-2.md), [sprint-3.md](sprint-3.md)
+- [Task Breakdown terpadu](sprint-1.md)
 - [docs/decisions/2026-11-05-requirements-draft.md](../decisions/2026-11-05-requirements-draft.md)
 - [docs/technical-specs/05-module-definitions.md](../technical-specs/05-module-definitions.md)

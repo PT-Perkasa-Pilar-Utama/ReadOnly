@@ -1,23 +1,24 @@
-**Version:** 0.2
+**Version:** 0.3
 **Date:** 2026-11-09
 **Author:** Tech Lead
-**Status:** Diselaraskan untuk baseline 12 US / 77 AC
+**Status:** Baseline 12 US / 77 AC, dikonsolidasikan dalam satu file
 **Phase:** Task Breakdown
 
 # Task Breakdown - ReadOnly
 
-> **Status:** Rundown PM menetapkan satu sprint ([rundown PM](../decisions/2026-11-08-pm-sprint-timeline.md)). Seluruh **12 US dan 77 AC** dari [grooming final](../decisions/2026-11-06-grooming-final.md) serta [AC addendum](../business/acceptance-criteria-addendum.md) kini telah dipetakan ke kartu kerja di bawah ini agar tim memiliki acuan cabang/PR yang lengkap. Pilihan kartu yang masuk komitmen Sprint Planning tetap mengikuti kapasitas tim; angka `Est` (`Xd`) pada tabel merupakan estimasi bobot relatif per kartu.
+> Rundown PM menetapkan satu sprint ([rundown PM](../decisions/2026-11-08-pm-sprint-timeline.md)). Task cards baseline kini dikonsolidasikan ke satu file, [`sprint-1.md`](sprint-1.md), dalam tiga kelompok alokasi historis. Seluruh 12 US dan 77 AC dipetakan ke kartu agar tim memiliki acuan teknis dan traceability. Kartu yang masuk komitmen sprint tetap dipilih saat Sprint Planning berdasarkan kapasitas; estimasi pada tabel adalah bobot relatif per kartu, bukan komitmen jadwal.
 
-Cara membaca: setiap kartu = satu branch = satu PR (P-19). ID kartu berformat `[BE|FE|TL|DB]-S<kelompok>-<NN>`. Kartu TL dan DB berada di tabel Backend.
+Cara membaca: setiap kartu = satu branch = satu PR (P-19). ID kartu dipertahankan sesuai kelompok asal: `[BE|FE|TL|DB]-S<kelompok>-<NN>`. Prefix `S2` dan `S3` pada ID lama tidak menetapkan Sprint 2 atau Sprint 3 pada rundown PM.
 
 - [Team and process](team-and-process.md)
-- [Sprint 1 (Kelompok 1): Fondasi, Autentikasi, Master Buku, Master Genre, & Management User](sprint-1.md)
-- [Sprint 2 (Kelompok 2): Katalog Member, Peminjaman QR, & Dashboard Admin](sprint-2.md)
-- [Sprint 3 (Kelompok 3): Manajemen Peminjaman, Pengembalian/Denda, & Reminder/Popup](sprint-3.md)
+- [Sprint 1: Task Breakdown terpadu (kelompok historis 1–3)](sprint-1.md)
+- [Task breakdown lengkap (Excel)](task-breakdown.xlsx)
+- [Huly sub-issue drafts (Markdown)](huly-sub-issues.md)
+- [Huly sub-issue drafts (Excel)](huly-sub-issues.xlsx)
 
 ## Ringkasan Kartu (Baseline Penuh 12 US / 77 AC)
 
-| Kelompok | Fokus | BE cards | FE cards | BE Est | FE Est |
+| Kelompok alokasi historis | Fokus | BE cards | FE cards | BE Est | FE Est |
 | --- | --- | --- | --- | --- | --- |
 | 1 | Fondasi, Autentikasi, Master Buku, Master Genre (US-11), Management User (US-12) | 7 | 7 | 8.5 | 11.25 |
 | 2 | Katalog Member, Peminjaman dengan QR, dan Dashboard Admin | 4 | 4 | 5.0 | 8.0 |
@@ -30,7 +31,7 @@ Cara membaca: setiap kartu = satu branch = satu PR (P-19). ID kartu berformat `[
 
 ## AC coverage rules
 
-- Seluruh **77 AC** (`AC-01.01` s/d `AC-12.11`) telah dipetakan ke minimal satu kartu di `sprint-1.md`, `sprint-2.md`, dan `sprint-3.md`.
+- Seluruh **77 AC** (`AC-01.01` s/d `AC-12.11`) dipetakan ke minimal satu kartu pada tiga kelompok di `sprint-1.md`.
 - AC murni UI -> kartu FE.
 - AC job (`AC-06.03`) -> kartu BE.
 - Kartu Member dan Admin Perpus dipisah sesuai aktor (Q-35).

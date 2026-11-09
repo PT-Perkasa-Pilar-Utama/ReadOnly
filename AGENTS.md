@@ -16,7 +16,7 @@ ReadOnly adalah sistem peminjaman buku internal PT. Perkasa Pilar Utama (PRD-024
 | BE1 | API ElysiaJS (`BE-S1-01` s/d `BE-S3-05`): auth, books, loans, jobs, notifications, dashboard |
 | FE1 | SolidJS (`FE-S1-01` s/d `FE-S3-05`): halaman, komponen, scanner kamera QR |
 
-Nama orang tidak dicatat di dokumen teknis (P-07).
+Nama PIC hanya dicantumkan pada kolom Owner di task breakdown; dokumen teknis lain tetap menggunakan peran (P-07).
 
 ## Invarian
 

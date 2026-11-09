@@ -6,7 +6,7 @@
 
 # How We Work
 
-Tim: TL, BE1, FE1. Nama orang: tidak diketahui (P-07).
+Tim: TL, BE1, FE1. PIC per kartu tercantum pada kolom Owner di [task breakdown](../task-breakdown/sprint-1.md); dokumen teknis lain menggunakan peran (P-07).
 
 - Satu kartu = satu PR.
 - Contract-first.

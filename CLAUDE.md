@@ -22,7 +22,7 @@
 
 ## Team and Work Model
 
-Tim pengembang internal terdiri dari 3 peran engineering (ditambah QA untuk pengujian SIT/test script). Nama asli engineer tidak dicatat di dokumen teknis (P-07: Tidak diketahui).
+Tim pengembang internal terdiri dari 3 peran engineering (ditambah QA untuk pengujian SIT/test script). Nama PIC dicantumkan hanya pada kolom Owner task breakdown; dokumen teknis lain menggunakan peran (P-07).
 
 | Peran | Fokus Utama | Tanggung Jawab Dominan |
 | --- | --- | --- |

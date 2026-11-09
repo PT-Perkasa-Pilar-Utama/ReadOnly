@@ -266,7 +266,7 @@ bun run build:web
 | [Sprint Breakdown](docs/business/sprint-breakdown.md) | Rundown satu sprint PM; belum menjadi komitmen seluruh 77 AC |
 | [Technical Specs](docs/technical-specs/_index.md) | Spesifikasi teknis arsitektur, data model, dan keamanan (01-17) |
 | [API Specs](docs/api-specs/_index.md) | 36 operasi tercatat dan diselaraskan; tracker implementasi ada di `07-system.md` |
-| [Task Breakdown](docs/task-breakdown/_index.md) | 32 kartu kerja (16 BE + 16 FE) mencakup seluruh 12 US dan 77 AC |
+| [Task Breakdown](docs/task-breakdown/_index.md) | 32 kartu kerja (16 BE + 16 FE) dalam satu file, dikelompokkan menurut alokasi lama; scope sprint dipilih saat Planning |
 | [Deployment Plan](docs/deployment-plan/_index.md) | Rencana deployment staging, production, dan database reset |
 | [Coding Standard](docs/coding-standard/_index.md) | Standar koding, TypeScript, dan PR hygiene (01-11) |
 | [Code Review Checklist](docs/code-review-checklist/_index.md) | Checklist review PR dan kontrol keamanan SEC-01 s/d SEC-17 |
