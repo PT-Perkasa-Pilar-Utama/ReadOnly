@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "paths": { "@web/*": ["./apps/web/src/*"] },
     "target": "ESNext",
     "module": "ESNext",
     "moduleResolution": "Bundler",
