@@ -1,7 +1,6 @@
 import { USER_ROLE_LABELS, USER_STATUS_LABELS } from '@readonly/shared';
 import { createQuery } from '@tanstack/solid-query';
 import { Link } from '@tanstack/solid-router';
-import { createSignal, For, Show } from 'solid-js';
 import type { User } from '@web/api/contracts';
 import { getUsers, setUserStatus } from '@web/api/users';
 import { ErrorNotice, Loading, notify } from '@web/components/Feedback';
@@ -11,6 +10,7 @@ import Pagination from '@web/components/Pagination';
 import { debounced } from '@web/lib/debounced';
 import { queryClient } from '@web/lib/query';
 import { currentUser } from '@web/lib/session';
+import { createSignal, For, Show } from 'solid-js';
 
 export default function UsersPage() {
   const [search, setSearch] = createSignal('');

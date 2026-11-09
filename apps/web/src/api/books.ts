@@ -1,4 +1,4 @@
-import { request, queryString } from './client';
+import { queryString, request } from './client';
 import { bookDetailSchema, catalogSchema, envelope } from './contracts';
 
 // AC-07.01–AC-07.03: rekomendasi, pencarian, filter, dan paginasi berasal dari API.

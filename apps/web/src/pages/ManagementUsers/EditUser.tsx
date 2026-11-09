@@ -1,8 +1,8 @@
 import { createQuery } from '@tanstack/solid-query';
 import { useParams } from '@tanstack/solid-router';
-import { Show } from 'solid-js';
 import { getUser } from '@web/api/users';
 import { ErrorNotice, Loading } from '@web/components/Feedback';
+import { Show } from 'solid-js';
 import UserForm from './UserForm';
 
 export default function EditUserPage() {

@@ -1,16 +1,16 @@
 import { useNavigate } from '@tanstack/solid-router';
-import { createSignal, lazy, Show } from 'solid-js';
 import { getProfile, login } from '@web/api/auth';
 import { isDemo } from '@web/api/client';
 import AuthLayout from '@web/components/AuthLayout';
-import Field from '@web/components/Field';
 import { ErrorNotice, notify } from '@web/components/Feedback';
+import Field from '@web/components/Field';
 import { beginLogin } from '@web/lib/session';
 import {
   type FieldErrors,
   hasErrors,
   validateLogin,
 } from '@web/lib/validation';
+import { createSignal, lazy, Show } from 'solid-js';
 
 const DemoAccounts = import.meta.env.DEV
   ? lazy(() => import('@web/dev/DemoAccounts'))
@@ -86,7 +86,14 @@ export default function LoginPage() {
         </p>
       </form>
       <Show when={isDemo}>
-        <DemoAccounts onSelect={(email, password) => { setEmail(email); setPassword(password); setErrors({}); setFailure(undefined); }} />
+        <DemoAccounts
+          onSelect={(email, password) => {
+            setEmail(email);
+            setPassword(password);
+            setErrors({});
+            setFailure(undefined);
+          }}
+        />
       </Show>
     </AuthLayout>
   );

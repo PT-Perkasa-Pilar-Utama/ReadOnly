@@ -1,4 +1,4 @@
-import { createUniqueId, onMount, type JSX } from 'solid-js';
+import { createUniqueId, type JSX, onMount } from 'solid-js';
 import Icon from './Icon';
 
 export default function Modal(props: {
@@ -18,6 +18,12 @@ export default function Modal(props: {
       onCancel={(event) => {
         event.preventDefault();
         props.onClose();
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          props.onClose();
+        }
       }}
       onClick={(event) => {
         if (event.target === dialog) {

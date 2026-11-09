@@ -5,8 +5,8 @@ import {
 import { createQuery } from '@tanstack/solid-query';
 import { useLocation } from '@tanstack/solid-router';
 import { createEffect, createSignal, For, onCleanup, Show } from 'solid-js';
-import { getNotifications } from '../api/notifications';
 import type { Popup } from '../api/contracts';
+import { getNotifications } from '../api/notifications';
 import { consumeLoginReminders, hasLoginReminders } from '../lib/session';
 import { ErrorNotice, Loading } from './Feedback';
 import Icon from './Icon';
@@ -27,17 +27,17 @@ export function NotificationsMenu() {
       if (event.target instanceof Node && !wrapper.contains(event.target))
         setOpen(false);
     };
-    const escape = (event: KeyboardEvent) => {
+    const handleEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setOpen(false);
         wrapper.querySelector('button')?.focus();
       }
     };
     document.addEventListener('pointerdown', closeOutside);
-    document.addEventListener('keydown', escape);
+    document.addEventListener('keydown', handleEscape);
     onCleanup(() => {
       document.removeEventListener('pointerdown', closeOutside);
-      document.removeEventListener('keydown', escape);
+      document.removeEventListener('keydown', handleEscape);
     });
   });
   return (

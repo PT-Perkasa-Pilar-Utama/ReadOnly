@@ -11,7 +11,12 @@ import {
   userListSchema,
 } from '../api/contracts';
 import { createDemoApi } from './demo-api';
-import { DEMO_ADMIN, DEMO_MEMBER, DEMO_PASSWORD, makeDemoPopups } from './fixtures';
+import {
+  DEMO_ADMIN,
+  DEMO_MEMBER,
+  DEMO_PASSWORD,
+  makeDemoPopups,
+} from './fixtures';
 
 let call: ReturnType<typeof createDemoApi>;
 let storage: Map<string, string>;
@@ -40,7 +45,10 @@ const signIn = (email = DEMO_ADMIN) =>
 describe('simulasi development mengikuti kontrak FE', () => {
   test('AC-10.05: tanggal popup mengikuti WIB ketika tanggal UTC berbeda', () => {
     const popups = makeDemoPopups(new Date('2026-11-09T18:00:00Z'));
-    expect(popups.find(popup => popup.condition === 'DUE_TODAY')?.books[0]?.due_date).toBe('2026-11-10');
+    expect(
+      popups.find((popup) => popup.condition === 'DUE_TODAY')?.books[0]
+        ?.due_date,
+    ).toBe('2026-11-10');
   });
   test('AC-01.06–08: validasi dua langkah, genre wajib, email duplikat', async () => {
     expect(

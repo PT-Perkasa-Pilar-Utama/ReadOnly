@@ -1,5 +1,4 @@
 import { createQuery } from '@tanstack/solid-query';
-import { createSignal, For, Show } from 'solid-js';
 import { getGenres } from '@web/api/auth';
 import { getBooks } from '@web/api/books';
 import BookCard from '@web/components/BookCard';
@@ -7,6 +6,7 @@ import { ErrorNotice, Loading } from '@web/components/Feedback';
 import Icon from '@web/components/Icon';
 import Pagination from '@web/components/Pagination';
 import { debounced } from '@web/lib/debounced';
+import { createSignal, For, Show } from 'solid-js';
 
 export default function HomePage() {
   const [search, setSearch] = createSignal('');

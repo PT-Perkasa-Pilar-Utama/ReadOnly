@@ -1,5 +1,4 @@
 import { useNavigate } from '@tanstack/solid-router';
-import { createSignal, Show } from 'solid-js';
 import { validateRegistration } from '@web/api/auth';
 import { ApiError } from '@web/api/client';
 import type { Registration } from '@web/api/contracts';
@@ -11,6 +10,7 @@ import {
   hasErrors,
   validateAccount,
 } from '@web/lib/validation';
+import { createSignal, Show } from 'solid-js';
 import {
   emptyRegistration,
   registrationDraft,

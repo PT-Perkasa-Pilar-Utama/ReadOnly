@@ -6,22 +6,22 @@ import {
   Outlet,
   redirect,
 } from '@tanstack/solid-router';
+import AppLayout from './components/AppLayout';
+import { ErrorNotice, Loading, ToastRegion } from './components/Feedback';
+import { loadSession } from './lib/session';
+import BookDetailPage from './pages/BookDetail';
+import DashboardPage from './pages/Dashboard';
+import HomePage from './pages/Home';
+import LoginPage from './pages/Login';
+import UsersPage from './pages/ManagementUsers';
+import AddAdminPage from './pages/ManagementUsers/AddAdmin';
+import EditUserPage from './pages/ManagementUsers/EditUser';
+import GenresPage from './pages/PilihGenre';
+import RegisterPage from './pages/RegisterStep1';
 import {
   clearRegistration,
   registrationDraft,
 } from './pages/RegisterStep1/draft';
-import AppLayout from './components/AppLayout';
-import { ErrorNotice, Loading, ToastRegion } from './components/Feedback';
-import { loadSession } from './lib/session';
-import LoginPage from './pages/Login';
-import RegisterPage from './pages/RegisterStep1';
-import GenresPage from './pages/PilihGenre';
-import HomePage from './pages/Home';
-import BookDetailPage from './pages/BookDetail';
-import UsersPage from './pages/ManagementUsers';
-import AddAdminPage from './pages/ManagementUsers/AddAdmin';
-import EditUserPage from './pages/ManagementUsers/EditUser';
-import DashboardPage from './pages/Dashboard';
 
 const root = createRootRoute({
   component: () => (

@@ -1,10 +1,10 @@
 import { createQuery } from '@tanstack/solid-query';
 import { Link, useParams } from '@tanstack/solid-router';
-import { For, Show } from 'solid-js';
 import { getBook } from '@web/api/books';
 import { BookCover } from '@web/components/BookCard';
 import { ErrorNotice, Loading } from '@web/components/Feedback';
 import Icon from '@web/components/Icon';
+import { For, Show } from 'solid-js';
 
 export default function BookDetailPage() {
   const params = useParams({ strict: false });

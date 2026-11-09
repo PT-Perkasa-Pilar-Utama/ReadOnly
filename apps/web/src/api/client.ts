@@ -19,7 +19,8 @@ const errorMessages: Record<string, string> = {
   invalid_credentials: 'email and Password tidak sama',
   user_not_found: 'Email Not Registered',
   account_inactive: 'Akun Anda tidak aktif. Silakan hubungi Admin Perpus.',
-  account_has_active_loans: 'Akun tidak dapat dinonaktifkan karena masih memiliki peminjaman aktif',
+  account_has_active_loans:
+    'Akun tidak dapat dinonaktifkan karena masih memiliki peminjaman aktif',
 };
 let unauthorizedHandler = () => {};
 export function onUnauthorized(handler: () => void) {

@@ -1,6 +1,5 @@
 import { createQuery } from '@tanstack/solid-query';
 import { Link, useNavigate } from '@tanstack/solid-router';
-import { createSignal, For, Show } from 'solid-js';
 import { getGenres, register } from '@web/api/auth';
 import { ApiError } from '@web/api/client';
 import AuthLayout from '@web/components/AuthLayout';
@@ -10,6 +9,7 @@ import {
   clearRegistration,
   registrationDraft,
 } from '@web/pages/RegisterStep1/draft';
+import { createSignal, For, Show } from 'solid-js';
 
 export default function GenresPage() {
   const navigate = useNavigate();

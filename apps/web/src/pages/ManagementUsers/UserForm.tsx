@@ -1,11 +1,10 @@
-import { Link, useNavigate } from '@tanstack/solid-router';
-import { createSignal, Show } from 'solid-js';
 import { USER_ROLE_LABELS } from '@readonly/shared';
-import { addAdmin, editUser } from '@web/api/users';
+import { Link, useNavigate } from '@tanstack/solid-router';
 import { ApiError } from '@web/api/client';
 import type { Registration, UserDetail } from '@web/api/contracts';
-import Field from '@web/components/Field';
+import { addAdmin, editUser } from '@web/api/users';
 import { ErrorNotice, notify } from '@web/components/Feedback';
+import Field from '@web/components/Field';
 import Icon from '@web/components/Icon';
 import { queryClient } from '@web/lib/query';
 import { currentUser, setCurrentUser } from '@web/lib/session';
@@ -15,6 +14,7 @@ import {
   validateAccount,
   validateEdit,
 } from '@web/lib/validation';
+import { createSignal, Show } from 'solid-js';
 
 export default function UserForm(props: { user?: UserDetail }) {
   const navigate = useNavigate();

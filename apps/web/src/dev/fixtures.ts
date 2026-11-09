@@ -53,7 +53,12 @@ export const demoBooks: BookDetail[] = titles.map(
 
 export function makeDemoPopups(today: Date): Popup[] {
   const date = (offset: number) => {
-    const wibDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit' }).format(today);
+    const wibDate = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Jakarta',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(today);
     const day = new Date(`${wibDate}T12:00:00+07:00`);
     day.setUTCDate(day.getUTCDate() + offset);
     return day.toISOString().slice(0, 10);

@@ -1,9 +1,9 @@
 import {
+  LOGIN_POPUP_CONDITION_ORDER,
+  NOTIFICATION_TYPES,
   paginationSchema,
   USER_ROLES,
   USER_STATUSES,
-  NOTIFICATION_TYPES,
-  LOGIN_POPUP_CONDITION_ORDER,
 } from '@readonly/shared';
 import { z } from 'zod';
 
