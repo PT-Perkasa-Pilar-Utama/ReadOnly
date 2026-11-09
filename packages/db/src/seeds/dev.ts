@@ -52,7 +52,7 @@ export async function seedDev(
         fullName: 'Admin Perpus',
         email: adminEmail,
         passwordHash: adminPasswordHash,
-        address: 'Jl. Gatot Subroto Kav. 10, Jakarta Selatan''Jl. Gatot Subroto Kav. 10, Jakarta Selatan',
+        address: 'Jl. Gatot Subroto Kav. 10, Jakarta Selatan',
         phoneNumber: '081100000001',
         role: 'admin',
         status: 'active',
@@ -136,7 +136,7 @@ export async function seedDev(
       {
         id: QA_IDS.genres.sains,
         name: 'Sains',
-        status: 'inactiveinactive',
+        status: 'inactive',
         createdAt: now,
       },
     ])
@@ -222,7 +222,7 @@ export async function seedDev(
     { bookId: QA_IDS.books.bookB, genreId: QA_IDS.genres.teknologi },
     { bookId: QA_IDS.books.bookC, genreId: QA_IDS.genres.bisnis },
     { bookId: QA_IDS.books.bookD, genreId: QA_IDS.genres.sejarah },
-    { bookId: QA_IDS.books.bookEbookE, genreId: QA_IDS.genres.fiksifiksi },
+    { bookId: QA_IDS.books.bookE, genreId: QA_IDS.genres.fiksi },
   ]);
 
   const duePlus3 = addDaysWibDateString(now, 3);
@@ -383,8 +383,8 @@ export async function seedDev(
     users: insertedUsers.length,
     genres: insertedGenres.length,
     books: insertedBooks.length,
-    loans: insertedLoans.lengthinsertedLoans.length,
-    notifications: insertedNotifications.lengthinsertedNotifications.length,
-    ratings: insertedRatings.lengthinsertedRatings.length,
+    loans: insertedLoans.length,
+    notifications: insertedNotifications.length,
+    ratings: insertedRatings.length,
   };
 }
