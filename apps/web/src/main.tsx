@@ -1,28 +1,17 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/solid-query';
-import {
-  createRootRoute,
-  createRoute,
-  createRouter,
-  Outlet,
-  RouterProvider,
-} from '@tanstack/solid-router';
+import { QueryClientProvider } from '@tanstack/solid-query';
+import { RouterProvider } from '@tanstack/solid-router';
 import { render } from 'solid-js/web';
 
-const rootRoute = createRootRoute({
-  component: () => <Outlet />,
-});
+import { onUnauthorized } from './api/client';
+import { queryClient } from './lib/query';
+import { clearSession } from './lib/session';
+import { router } from './routes';
+import './styles.css';
 
-const indexRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/',
-  component: () => <main />,
+onUnauthorized(() => {
+  clearSession();
+  window.location.replace('/login');
 });
-
-const router = createRouter({
-  routeTree: rootRoute.addChildren([indexRoute]),
-});
-
-const queryClient = new QueryClient();
 const rootElement = document.getElementById('root');
 
 if (!rootElement) {
