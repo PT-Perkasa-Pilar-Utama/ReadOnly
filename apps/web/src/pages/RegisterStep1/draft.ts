@@ -1,5 +1,5 @@
-import { createSignal } from 'solid-js';
 import type { Registration } from '@web/api/contracts';
+import { createSignal } from 'solid-js';
 
 export const emptyRegistration = (): Registration => ({
   full_name: '',

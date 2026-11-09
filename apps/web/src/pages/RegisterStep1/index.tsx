@@ -3,8 +3,8 @@ import { validateRegistration } from '@web/api/auth';
 import { ApiError } from '@web/api/client';
 import type { Registration } from '@web/api/contracts';
 import AuthLayout from '@web/components/AuthLayout';
-import Field from '@web/components/Field';
 import { ErrorNotice } from '@web/components/Feedback';
+import Field from '@web/components/Field';
 import {
   type FieldErrors,
   hasErrors,
