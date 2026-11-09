@@ -1,26 +1,54 @@
+import { sha256Hex } from '@readonly/db';
 import {
   API_MESSAGES,
   type ApiSuccessEnvelope,
+  type AuthMeResponseData,
+  type LoginResponseData,
+  loginSchema,
   type RegisterResponseData,
   type RegisterValidateResponseData,
   registerSchema,
   registerValidateSchema,
+  SESSION_DURATION_MS,
 } from '@readonly/shared';
 import { type ClockPort, SystemClock } from '../../ports/clock';
 import {
+  createAccountInactiveError,
   createConflictError,
+  createInvalidCredentialsError,
+  createSessionNotFoundError,
+  createUserNotFoundError,
   createValidationError,
   fromZodError,
 } from '../../shared/errors';
 import type { ActiveGenreProvider } from '../books/books.service';
-import type { AuthRepository } from './auth.repository';
+import type { AuthenticatedUser, AuthRepository } from './auth.repository';
 
 export interface AuthServiceOptions {
   repository: AuthRepository;
-  genreProvider: ActiveGenreProvider;
+  genreProvider?: ActiveGenreProvider;
   clock?: ClockPort;
   bcryptSaltRounds?: number;
 }
+
+export interface AuthenticatedSession {
+  user: AuthenticatedUser;
+  tokenHash: string;
+}
+
+export interface LoginResult {
+  envelope: ApiSuccessEnvelope<LoginResponseData>;
+  sessionToken: string;
+}
+
+const DEFAULT_GENRE_PROVIDER: ActiveGenreProvider = {
+  async listActiveGenres() {
+    return [];
+  },
+  async areAllGenresActive(): Promise<boolean> {
+    return true;
+  },
+};
 
 export function resolveBcryptSaltRounds(override?: number): number {
   if (override !== undefined) {
@@ -41,6 +69,12 @@ export function resolveBcryptSaltRounds(override?: number): number {
   return 11;
 }
 
+export function generateSessionToken(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Buffer.from(bytes).toString('hex');
+}
+
 export class AuthService {
   private readonly repository: AuthRepository;
   private readonly genreProvider: ActiveGenreProvider;
@@ -49,9 +83,13 @@ export class AuthService {
 
   constructor(options: AuthServiceOptions) {
     this.repository = options.repository;
-    this.genreProvider = options.genreProvider;
+    this.genreProvider = options.genreProvider ?? DEFAULT_GENRE_PROVIDER;
     this.clock = options.clock ?? new SystemClock();
     this.bcryptSaltRounds = resolveBcryptSaltRounds(options.bcryptSaltRounds);
+  }
+
+  getBcryptSaltRounds(): number {
+    return this.bcryptSaltRounds;
   }
 
   async validateRegistrationStep1(
@@ -124,5 +162,87 @@ export class AuthService {
       },
       message: API_MESSAGES.REGISTER_SUCCESS,
     };
+  }
+
+  async login(rawInput: unknown): Promise<LoginResult> {
+    const parsed = loginSchema.safeParse(rawInput);
+    if (!parsed.success) {
+      throw fromZodError(parsed.error);
+    }
+
+    const user = await this.repository.findUserByEmail(parsed.data.email);
+    if (!user) {
+      throw createUserNotFoundError();
+    }
+
+    const passwordValid = await Bun.password.verify(
+      parsed.data.password,
+      user.passwordHash,
+    );
+    if (!passwordValid) {
+      throw createInvalidCredentialsError();
+    }
+
+    if (user.status === 'inactive') {
+      throw createAccountInactiveError();
+    }
+
+    const sessionToken = generateSessionToken();
+    const tokenHash = sha256Hex(sessionToken);
+    const createdAt = this.clock.utcNow();
+    const expiresAt = new Date(createdAt.getTime() + SESSION_DURATION_MS);
+
+    await this.repository.createSession({
+      userId: user.id,
+      tokenHash,
+      expiresAt,
+      createdAt,
+    });
+
+    return {
+      envelope: {
+        data: { token: sessionToken },
+        message: API_MESSAGES.LOGIN_SUCCESS,
+      },
+      sessionToken,
+    };
+  }
+
+  async authenticateToken(
+    rawToken: string | null | undefined,
+  ): Promise<AuthenticatedSession> {
+    if (typeof rawToken !== 'string' || rawToken.trim().length === 0) {
+      throw createSessionNotFoundError();
+    }
+
+    const tokenHash = sha256Hex(rawToken.trim());
+    const user = await this.repository.findActiveSessionByTokenHash(
+      tokenHash,
+      this.clock.utcNow(),
+    );
+
+    if (!user) {
+      throw createSessionNotFoundError();
+    }
+
+    return { user, tokenHash };
+  }
+
+  getMe(user: AuthenticatedUser): ApiSuccessEnvelope<AuthMeResponseData> {
+    return {
+      data: {
+        id: user.id,
+        full_name: user.fullName,
+        role: user.role,
+        email: user.email,
+      },
+    };
+  }
+
+  async logout(tokenHash: string): Promise<void> {
+    const deleted = await this.repository.deleteSessionByTokenHash(tokenHash);
+    if (!deleted) {
+      throw createSessionNotFoundError();
+    }
   }
 }

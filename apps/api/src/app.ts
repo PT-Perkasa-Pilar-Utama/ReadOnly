@@ -7,7 +7,11 @@ import {
   DrizzleAuthRepository,
   InMemoryAuthRepository,
 } from './modules/auth/auth.repository';
-import { createAuthRoutes } from './modules/auth/auth.routes';
+import {
+  createAuthRoutes,
+  requireAuth,
+  requireRole,
+} from './modules/auth/auth.routes';
 import { AuthService } from './modules/auth/auth.service';
 import {
   type BooksRepository,
@@ -20,6 +24,8 @@ import { createSystemRoutes, type HealthChecks } from './modules/system/health';
 import { type ClockPort, SystemClock } from './ports/clock';
 import { AppError } from './shared/errors';
 import { InMemoryRateLimiter, type RateLimiter } from './shared/rate-limit';
+
+export { requireAuth, requireRole };
 
 export interface AppOptions {
   database?: () => Promise<boolean>;
@@ -34,6 +40,9 @@ export interface AppOptions {
   registerRateLimiter?: RateLimiter;
   registerRateLimitMax?: number;
   registerRateLimitWindowMs?: number;
+  loginRateLimiter?: RateLimiter;
+  loginRateLimitMax?: number;
+  loginRateLimitWindowMs?: number;
   bcryptSaltRounds?: number;
 }
 
@@ -60,7 +69,7 @@ function getErrorDetails(code: string | number): ErrorDetails {
         statusCode: 401,
         error: 'Unauthorized',
         code: 'unauthorized',
-        message: 'Silahkan login',
+        message: API_MESSAGES.UNAUTHORIZED,
       };
     case 'FORBIDDEN':
     case 403:
@@ -68,7 +77,7 @@ function getErrorDetails(code: string | number): ErrorDetails {
         statusCode: 403,
         error: 'Forbidden',
         code: 'forbidden',
-        message: 'Akses ditolak.',
+        message: API_MESSAGES.FORBIDDEN,
       };
     case 'CONFLICT':
     case 409:
@@ -107,7 +116,7 @@ function getErrorDetails(code: string | number): ErrorDetails {
         statusCode: 500,
         error: 'Internal Server Error',
         code: 'internal_error',
-        message: 'Terjadi kesalahan internal.',
+        message: 'Internal server error',
       };
   }
 }
@@ -136,6 +145,17 @@ function resolveRegisterRateLimitMax(): number {
     }
   }
   return 20;
+}
+
+function resolveLoginRateLimitMax(): number {
+  const raw = process.env.LOGIN_RATE_LIMIT;
+  if (raw !== undefined && raw.trim().length > 0) {
+    const parsed = Number(raw);
+    if (Number.isInteger(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return 5;
 }
 
 function resolveRateLimitWindowMs(): number {
@@ -188,10 +208,18 @@ export function createApp(options?: AppOptions) {
         options?.registerRateLimitWindowMs ?? resolveRateLimitWindowMs(),
     });
 
+  const loginRateLimiter =
+    options?.loginRateLimiter ??
+    new InMemoryRateLimiter({
+      clock,
+      maxAttempts: options?.loginRateLimitMax ?? resolveLoginRateLimitMax(),
+      windowMs: options?.loginRateLimitWindowMs ?? resolveRateLimitWindowMs(),
+    });
+
   const healthChecks = resolveHealthChecks(options);
 
   return new Elysia({ prefix: API_PREFIX })
-    .onError(({ code, error, set }) => {
+    .onError({ as: 'global' }, ({ code, error, set }) => {
       if (error instanceof AppError) {
         set.status = error.statusCode;
         return error.toEnvelope();
@@ -205,5 +233,5 @@ export function createApp(options?: AppOptions) {
     })
     .use(createSystemRoutes(healthChecks))
     .use(createBooksRoutes(booksService))
-    .use(createAuthRoutes(authService, registerRateLimiter));
+    .use(createAuthRoutes(authService, registerRateLimiter, loginRateLimiter));
 }

@@ -50,6 +50,62 @@ export function createValidationError(
   });
 }
 
+export function createInvalidCredentialsError(
+  message: string = API_MESSAGES.INVALID_CREDENTIALS,
+): AppError {
+  return new AppError({
+    statusCode: 422,
+    error: 'Unprocessable Entity',
+    code: 'invalid_credentials',
+    message,
+  });
+}
+
+export function createUserNotFoundError(
+  message: string = API_MESSAGES.USER_NOT_FOUND,
+): AppError {
+  return new AppError({
+    statusCode: 422,
+    error: 'Unprocessable Entity',
+    code: 'user_not_found',
+    message,
+  });
+}
+
+export function createAccountInactiveError(
+  message: string = API_MESSAGES.ACCOUNT_INACTIVE,
+): AppError {
+  return new AppError({
+    statusCode: 403,
+    error: 'Forbidden',
+    code: 'account_inactive',
+    message,
+  });
+}
+
+export function createSessionNotFoundError(
+  message: string = API_MESSAGES.UNAUTHORIZED,
+): AppError {
+  return new AppError({
+    statusCode: 401,
+    error: 'Unauthorized',
+    code: 'session_not_found',
+    message,
+  });
+}
+
+export function createForbiddenError(
+  message: string = API_MESSAGES.FORBIDDEN,
+  code = 'forbidden',
+): AppError {
+  return new AppError({
+    statusCode: 403,
+    error: 'Forbidden',
+    code,
+    message,
+  });
+}
+
 export function createConflictError(
   message: string,
   field?: string,
