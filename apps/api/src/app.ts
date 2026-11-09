@@ -1,7 +1,41 @@
 import { API_PREFIX } from '@readonly/config';
-import type { ApiErrorEnvelope } from '@readonly/shared';
+import type { Database } from '@readonly/db';
+import { API_MESSAGES, type ApiErrorEnvelope } from '@readonly/shared';
 import { Elysia } from 'elysia';
+import {
+  type AuthRepository,
+  DrizzleAuthRepository,
+  InMemoryAuthRepository,
+} from './modules/auth/auth.repository';
+import { createAuthRoutes } from './modules/auth/auth.routes';
+import { AuthService } from './modules/auth/auth.service';
+import {
+  type BooksRepository,
+  DrizzleBooksRepository,
+  InMemoryBooksRepository,
+} from './modules/books/books.repository';
+import { createBooksRoutes } from './modules/books/books.routes';
+import { BooksService } from './modules/books/books.service';
 import { createSystemRoutes, type HealthChecks } from './modules/system/health';
+import { type ClockPort, SystemClock } from './ports/clock';
+import { AppError } from './shared/errors';
+import { InMemoryRateLimiter, type RateLimiter } from './shared/rate-limit';
+
+export interface AppOptions {
+  database?: () => Promise<boolean>;
+  storage?: () => Promise<boolean>;
+  healthChecks?: HealthChecks;
+  db?: Database;
+  clock?: ClockPort;
+  booksRepository?: BooksRepository;
+  authRepository?: AuthRepository;
+  booksService?: BooksService;
+  authService?: AuthService;
+  registerRateLimiter?: RateLimiter;
+  registerRateLimitMax?: number;
+  registerRateLimitWindowMs?: number;
+  bcryptSaltRounds?: number;
+}
 
 interface ErrorDetails {
   statusCode: number;
@@ -66,7 +100,7 @@ function getErrorDetails(code: string | number): ErrorDetails {
         statusCode: 429,
         error: 'Too Many Requests',
         code: 'rate_limit_exceeded',
-        message: 'Terlalu banyak permintaan.',
+        message: API_MESSAGES.RATE_LIMIT_EXCEEDED,
       };
     default:
       return {
@@ -78,14 +112,98 @@ function getErrorDetails(code: string | number): ErrorDetails {
   }
 }
 
-export function createApp(healthChecks?: HealthChecks) {
+function resolveHealthChecks(options?: AppOptions): HealthChecks | undefined {
+  if (options?.healthChecks) {
+    return options.healthChecks;
+  }
+
+  if (options?.database || options?.storage) {
+    return {
+      database: options.database ?? (async () => false),
+      storage: options.storage ?? (async () => false),
+    };
+  }
+
+  return undefined;
+}
+
+function resolveRegisterRateLimitMax(): number {
+  const raw = process.env.REGISTER_RATE_LIMIT;
+  if (raw !== undefined && raw.trim().length > 0) {
+    const parsed = Number(raw);
+    if (Number.isInteger(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return 20;
+}
+
+function resolveRateLimitWindowMs(): number {
+  const raw = process.env.QR_RATE_LIMIT_WINDOW_MIN;
+  if (raw !== undefined && raw.trim().length > 0) {
+    const parsed = Number(raw);
+    if (Number.isInteger(parsed) && parsed > 0) {
+      return parsed * 60 * 1000;
+    }
+  }
+  return 10 * 60 * 1000;
+}
+
+export function createApp(options?: AppOptions) {
+  const clock = options?.clock ?? new SystemClock();
+  const booksRepository =
+    options?.booksRepository ??
+    (options?.db
+      ? new DrizzleBooksRepository(options.db)
+      : new InMemoryBooksRepository());
+  const booksService =
+    options?.booksService ?? new BooksService(booksRepository);
+
+  const authRepository =
+    options?.authRepository ??
+    (options?.db
+      ? new DrizzleAuthRepository(options.db)
+      : new InMemoryAuthRepository(undefined, (ids) =>
+          booksService.areAllGenresActive(ids),
+        ));
+
+  const authService =
+    options?.authService ??
+    new AuthService({
+      repository: authRepository,
+      genreProvider: booksService,
+      clock,
+      ...(options?.bcryptSaltRounds !== undefined
+        ? { bcryptSaltRounds: options.bcryptSaltRounds }
+        : {}),
+    });
+
+  const registerRateLimiter =
+    options?.registerRateLimiter ??
+    new InMemoryRateLimiter({
+      clock,
+      maxAttempts:
+        options?.registerRateLimitMax ?? resolveRegisterRateLimitMax(),
+      windowMs:
+        options?.registerRateLimitWindowMs ?? resolveRateLimitWindowMs(),
+    });
+
+  const healthChecks = resolveHealthChecks(options);
+
   return new Elysia({ prefix: API_PREFIX })
-    .onError(({ code, set }) => {
+    .onError(({ code, error, set }) => {
+      if (error instanceof AppError) {
+        set.status = error.statusCode;
+        return error.toEnvelope();
+      }
+
       const details = getErrorDetails(code);
       set.status = details.statusCode;
 
       const response: ApiErrorEnvelope = details;
       return response;
     })
-    .use(createSystemRoutes(healthChecks));
+    .use(createSystemRoutes(healthChecks))
+    .use(createBooksRoutes(booksService))
+    .use(createAuthRoutes(authService, registerRateLimiter));
 }
