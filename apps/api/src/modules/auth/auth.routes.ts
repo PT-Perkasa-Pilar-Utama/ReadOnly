@@ -190,9 +190,28 @@ function extractNormalizedEmailFromBody(body: unknown): string | null {
 
 export function createAuthRoutes(
   authService: AuthService,
+  registerRateLimiter: RateLimiter,
   loginRateLimiter: RateLimiter,
 ) {
   return new Elysia({ prefix: '/auth' })
+    .post('/register/validate', async ({ body, request }) => {
+      const clientIp = extractClientIp(request);
+      if (!registerRateLimiter.consume(`register:${clientIp}`)) {
+        throw createRateLimitError();
+      }
+
+      return authService.validateRegistrationStep1(body);
+    })
+    .post('/register', async ({ body, request, set }) => {
+      const clientIp = extractClientIp(request);
+      if (!registerRateLimiter.consume(`register:${clientIp}`)) {
+        throw createRateLimitError();
+      }
+
+      const result = await authService.registerMember(body);
+      set.status = 201;
+      return result;
+    })
     .post('/login', async ({ body, request, set }) => {
       const clientIp = extractClientIp(request);
       const ipKey = `login:ip:${clientIp}`;

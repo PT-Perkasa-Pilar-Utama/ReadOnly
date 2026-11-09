@@ -13,6 +13,13 @@ import {
   requireRole,
 } from './modules/auth/auth.routes';
 import { AuthService } from './modules/auth/auth.service';
+import {
+  type BooksRepository,
+  DrizzleBooksRepository,
+  InMemoryBooksRepository,
+} from './modules/books/books.repository';
+import { createBooksRoutes } from './modules/books/books.routes';
+import { BooksService } from './modules/books/books.service';
 import { createSystemRoutes, type HealthChecks } from './modules/system/health';
 import { type ClockPort, SystemClock } from './ports/clock';
 import { AppError } from './shared/errors';
@@ -26,8 +33,13 @@ export interface AppOptions {
   healthChecks?: HealthChecks;
   db?: Database;
   clock?: ClockPort;
+  booksRepository?: BooksRepository;
   authRepository?: AuthRepository;
+  booksService?: BooksService;
   authService?: AuthService;
+  registerRateLimiter?: RateLimiter;
+  registerRateLimitMax?: number;
+  registerRateLimitWindowMs?: number;
   loginRateLimiter?: RateLimiter;
   loginRateLimitMax?: number;
   loginRateLimitWindowMs?: number;
@@ -124,6 +136,17 @@ function resolveHealthChecks(options?: AppOptions): HealthChecks | undefined {
   return undefined;
 }
 
+function resolveRegisterRateLimitMax(): number {
+  const raw = process.env.REGISTER_RATE_LIMIT;
+  if (raw !== undefined && raw.trim().length > 0) {
+    const parsed = Number(raw);
+    if (Number.isInteger(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return 20;
+}
+
 function resolveLoginRateLimitMax(): number {
   const raw = process.env.LOGIN_RATE_LIMIT;
   if (raw !== undefined && raw.trim().length > 0) {
@@ -148,21 +171,41 @@ function resolveRateLimitWindowMs(): number {
 
 export function createApp(options?: AppOptions) {
   const clock = options?.clock ?? new SystemClock();
+  const booksRepository =
+    options?.booksRepository ??
+    (options?.db
+      ? new DrizzleBooksRepository(options.db)
+      : new InMemoryBooksRepository());
+  const booksService =
+    options?.booksService ?? new BooksService(booksRepository);
 
   const authRepository =
     options?.authRepository ??
     (options?.db
       ? new DrizzleAuthRepository(options.db)
-      : new InMemoryAuthRepository());
+      : new InMemoryAuthRepository(undefined, (ids) =>
+          booksService.areAllGenresActive(ids),
+        ));
 
   const authService =
     options?.authService ??
     new AuthService({
       repository: authRepository,
+      genreProvider: booksService,
       clock,
       ...(options?.bcryptSaltRounds !== undefined
         ? { bcryptSaltRounds: options.bcryptSaltRounds }
         : {}),
+    });
+
+  const registerRateLimiter =
+    options?.registerRateLimiter ??
+    new InMemoryRateLimiter({
+      clock,
+      maxAttempts:
+        options?.registerRateLimitMax ?? resolveRegisterRateLimitMax(),
+      windowMs:
+        options?.registerRateLimitWindowMs ?? resolveRateLimitWindowMs(),
     });
 
   const loginRateLimiter =
@@ -189,5 +232,6 @@ export function createApp(options?: AppOptions) {
       return response;
     })
     .use(createSystemRoutes(healthChecks))
-    .use(createAuthRoutes(authService, loginRateLimiter));
+    .use(createBooksRoutes(booksService))
+    .use(createAuthRoutes(authService, registerRateLimiter, loginRateLimiter));
 }

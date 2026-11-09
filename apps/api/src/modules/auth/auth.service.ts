@@ -5,20 +5,28 @@ import {
   type AuthMeResponseData,
   type LoginResponseData,
   loginSchema,
+  type RegisterResponseData,
+  type RegisterValidateResponseData,
+  registerSchema,
+  registerValidateSchema,
   SESSION_DURATION_MS,
 } from '@readonly/shared';
 import { type ClockPort, SystemClock } from '../../ports/clock';
 import {
   createAccountInactiveError,
+  createConflictError,
   createInvalidCredentialsError,
   createSessionNotFoundError,
   createUserNotFoundError,
+  createValidationError,
   fromZodError,
 } from '../../shared/errors';
+import type { ActiveGenreProvider } from '../books/books.service';
 import type { AuthenticatedUser, AuthRepository } from './auth.repository';
 
 export interface AuthServiceOptions {
   repository: AuthRepository;
+  genreProvider?: ActiveGenreProvider;
   clock?: ClockPort;
   bcryptSaltRounds?: number;
 }
@@ -32,6 +40,15 @@ export interface LoginResult {
   envelope: ApiSuccessEnvelope<LoginResponseData>;
   sessionToken: string;
 }
+
+const DEFAULT_GENRE_PROVIDER: ActiveGenreProvider = {
+  async listActiveGenres() {
+    return [];
+  },
+  async areAllGenresActive(): Promise<boolean> {
+    return true;
+  },
+};
 
 export function resolveBcryptSaltRounds(override?: number): number {
   if (override !== undefined) {
@@ -60,17 +77,91 @@ export function generateSessionToken(): string {
 
 export class AuthService {
   private readonly repository: AuthRepository;
+  private readonly genreProvider: ActiveGenreProvider;
   private readonly clock: ClockPort;
   private readonly bcryptSaltRounds: number;
 
   constructor(options: AuthServiceOptions) {
     this.repository = options.repository;
+    this.genreProvider = options.genreProvider ?? DEFAULT_GENRE_PROVIDER;
     this.clock = options.clock ?? new SystemClock();
     this.bcryptSaltRounds = resolveBcryptSaltRounds(options.bcryptSaltRounds);
   }
 
   getBcryptSaltRounds(): number {
     return this.bcryptSaltRounds;
+  }
+
+  async validateRegistrationStep1(
+    rawInput: unknown,
+  ): Promise<ApiSuccessEnvelope<RegisterValidateResponseData>> {
+    const parsed = registerValidateSchema.safeParse(rawInput);
+    if (!parsed.success) {
+      throw fromZodError(parsed.error);
+    }
+
+    const emailTaken = await this.repository.existsByEmail(parsed.data.email);
+    if (emailTaken) {
+      throw createConflictError(API_MESSAGES.EMAIL_ALREADY_REGISTERED, 'email');
+    }
+
+    return {
+      data: { step: 2 },
+      message: API_MESSAGES.REGISTER_STEP1_VALID,
+    };
+  }
+
+  async registerMember(
+    rawInput: unknown,
+  ): Promise<ApiSuccessEnvelope<RegisterResponseData>> {
+    const parsed = registerSchema.safeParse(rawInput);
+    if (!parsed.success) {
+      throw fromZodError(parsed.error);
+    }
+
+    const genresValid = await this.genreProvider.areAllGenresActive(
+      parsed.data.genres,
+    );
+    if (!genresValid) {
+      throw createValidationError(API_MESSAGES.GENRE_REQUIRED, 'genres');
+    }
+
+    const emailTaken = await this.repository.existsByEmail(parsed.data.email);
+    if (emailTaken) {
+      throw createConflictError(API_MESSAGES.EMAIL_ALREADY_REGISTERED, 'email');
+    }
+
+    // SEC-01: Hash password dengan bcrypt di service API sebelum diteruskan ke repository.
+    const passwordHash = await Bun.password.hash(parsed.data.password, {
+      algorithm: 'bcrypt',
+      cost: this.bcryptSaltRounds,
+    });
+
+    const created = await this.repository.createMemberWithGenres({
+      fullName: parsed.data.full_name,
+      email: parsed.data.email,
+      passwordHash,
+      address: parsed.data.address,
+      phoneNumber: parsed.data.phone_number,
+      genreIds: parsed.data.genres,
+      createdAt: this.clock.utcNow(),
+    });
+
+    if (created.status === 'email_conflict') {
+      throw createConflictError(API_MESSAGES.EMAIL_ALREADY_REGISTERED, 'email');
+    }
+
+    if (created.status === 'invalid_genres') {
+      throw createValidationError(API_MESSAGES.GENRE_REQUIRED, 'genres');
+    }
+
+    return {
+      data: {
+        userId: created.userId,
+        role: created.role,
+      },
+      message: API_MESSAGES.REGISTER_SUCCESS,
+    };
   }
 
   async login(rawInput: unknown): Promise<LoginResult> {
