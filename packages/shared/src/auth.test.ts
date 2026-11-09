@@ -98,4 +98,3 @@ describe('shared auth and genre schemas', () => {
     expect(parsed.success).toBe(true);
   });
 });
-

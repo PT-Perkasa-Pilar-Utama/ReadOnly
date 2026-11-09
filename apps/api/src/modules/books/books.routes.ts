@@ -13,4 +13,3 @@ export function createBooksRoutes(booksService: BooksService) {
     },
   );
 }
-

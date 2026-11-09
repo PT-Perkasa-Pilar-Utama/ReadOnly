@@ -15,4 +15,3 @@ export {
   registerSchema,
   registerValidateSchema,
 };
-

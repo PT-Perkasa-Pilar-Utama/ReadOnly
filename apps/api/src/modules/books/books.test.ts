@@ -87,4 +87,3 @@ describe('books module - GET /api/v1/genres', () => {
     expect(queryCalled).toBe(false);
   });
 });
-

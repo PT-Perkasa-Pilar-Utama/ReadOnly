@@ -83,4 +83,3 @@ export function fromZodError(error: z.ZodError): AppError {
 
   return createValidationError(message, field);
 }
-

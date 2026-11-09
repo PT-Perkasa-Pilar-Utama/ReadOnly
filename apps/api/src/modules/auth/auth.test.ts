@@ -416,4 +416,3 @@ describe('auth module - POST /api/v1/auth/register/validate & POST /api/v1/auth/
     expect(result).toEqual({ status: 'email_conflict' });
   });
 });
-

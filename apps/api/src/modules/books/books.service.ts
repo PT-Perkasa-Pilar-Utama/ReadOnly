@@ -27,4 +27,3 @@ export class BooksService implements ActiveGenreProvider {
     return uniqueIds.every((id) => activeSet.has(id));
   }
 }
-

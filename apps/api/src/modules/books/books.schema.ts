@@ -8,4 +8,3 @@ export const activeGenresResponseSchema = z.object({
 });
 
 export type ActiveGenresResponse = z.infer<typeof activeGenresResponseSchema>;
-
