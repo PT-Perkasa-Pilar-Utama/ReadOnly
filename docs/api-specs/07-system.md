@@ -50,9 +50,9 @@ Base: `/api/v1`
 | --- | --- | --- | --- |
 | Register validate | POST /auth/register/validate | publik | TODO |
 | Register | POST /auth/register | publik | TODO |
-| Login | POST /auth/login | publik | TODO |
-| Logout | POST /auth/logout | login | TODO |
-| Me | GET /auth/me | login | TODO |
+| Login | POST /auth/login | publik | OK |
+| Logout | POST /auth/logout | login | OK |
+| Me | GET /auth/me | login | OK |
 | Genres aktif | GET /genres | publik | TODO |
 | Admin genre list/search | GET /admin/genres | admin | TODO |
 | Add genre | POST /admin/genres | admin | TODO |

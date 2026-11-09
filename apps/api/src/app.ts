@@ -1,7 +1,38 @@
 import { API_PREFIX } from '@readonly/config';
-import type { ApiErrorEnvelope } from '@readonly/shared';
+import type { Database } from '@readonly/db';
+import { API_MESSAGES, type ApiErrorEnvelope } from '@readonly/shared';
 import { Elysia } from 'elysia';
+import {
+  type AuthRepository,
+  DrizzleAuthRepository,
+  InMemoryAuthRepository,
+} from './modules/auth/auth.repository';
+import {
+  createAuthRoutes,
+  requireAuth,
+  requireRole,
+} from './modules/auth/auth.routes';
+import { AuthService } from './modules/auth/auth.service';
 import { createSystemRoutes, type HealthChecks } from './modules/system/health';
+import { type ClockPort, SystemClock } from './ports/clock';
+import { AppError } from './shared/errors';
+import { InMemoryRateLimiter, type RateLimiter } from './shared/rate-limit';
+
+export { requireAuth, requireRole };
+
+export interface AppOptions {
+  database?: () => Promise<boolean>;
+  storage?: () => Promise<boolean>;
+  healthChecks?: HealthChecks;
+  db?: Database;
+  clock?: ClockPort;
+  authRepository?: AuthRepository;
+  authService?: AuthService;
+  loginRateLimiter?: RateLimiter;
+  loginRateLimitMax?: number;
+  loginRateLimitWindowMs?: number;
+  bcryptSaltRounds?: number;
+}
 
 interface ErrorDetails {
   statusCode: number;
@@ -26,7 +57,7 @@ function getErrorDetails(code: string | number): ErrorDetails {
         statusCode: 401,
         error: 'Unauthorized',
         code: 'unauthorized',
-        message: 'Silahkan login',
+        message: API_MESSAGES.UNAUTHORIZED,
       };
     case 'FORBIDDEN':
     case 403:
@@ -34,7 +65,7 @@ function getErrorDetails(code: string | number): ErrorDetails {
         statusCode: 403,
         error: 'Forbidden',
         code: 'forbidden',
-        message: 'Akses ditolak.',
+        message: API_MESSAGES.FORBIDDEN,
       };
     case 'CONFLICT':
     case 409:
@@ -66,26 +97,97 @@ function getErrorDetails(code: string | number): ErrorDetails {
         statusCode: 429,
         error: 'Too Many Requests',
         code: 'rate_limit_exceeded',
-        message: 'Terlalu banyak permintaan.',
+        message: API_MESSAGES.RATE_LIMIT_EXCEEDED,
       };
     default:
       return {
         statusCode: 500,
         error: 'Internal Server Error',
         code: 'internal_error',
-        message: 'Terjadi kesalahan internal.',
+        message: 'Internal server error',
       };
   }
 }
 
-export function createApp(healthChecks?: HealthChecks) {
+function resolveHealthChecks(options?: AppOptions): HealthChecks | undefined {
+  if (options?.healthChecks) {
+    return options.healthChecks;
+  }
+
+  if (options?.database || options?.storage) {
+    return {
+      database: options.database ?? (async () => false),
+      storage: options.storage ?? (async () => false),
+    };
+  }
+
+  return undefined;
+}
+
+function resolveLoginRateLimitMax(): number {
+  const raw = process.env.LOGIN_RATE_LIMIT;
+  if (raw !== undefined && raw.trim().length > 0) {
+    const parsed = Number(raw);
+    if (Number.isInteger(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return 5;
+}
+
+function resolveRateLimitWindowMs(): number {
+  const raw = process.env.QR_RATE_LIMIT_WINDOW_MIN;
+  if (raw !== undefined && raw.trim().length > 0) {
+    const parsed = Number(raw);
+    if (Number.isInteger(parsed) && parsed > 0) {
+      return parsed * 60 * 1000;
+    }
+  }
+  return 10 * 60 * 1000;
+}
+
+export function createApp(options?: AppOptions) {
+  const clock = options?.clock ?? new SystemClock();
+
+  const authRepository =
+    options?.authRepository ??
+    (options?.db
+      ? new DrizzleAuthRepository(options.db)
+      : new InMemoryAuthRepository());
+
+  const authService =
+    options?.authService ??
+    new AuthService({
+      repository: authRepository,
+      clock,
+      ...(options?.bcryptSaltRounds !== undefined
+        ? { bcryptSaltRounds: options.bcryptSaltRounds }
+        : {}),
+    });
+
+  const loginRateLimiter =
+    options?.loginRateLimiter ??
+    new InMemoryRateLimiter({
+      clock,
+      maxAttempts: options?.loginRateLimitMax ?? resolveLoginRateLimitMax(),
+      windowMs: options?.loginRateLimitWindowMs ?? resolveRateLimitWindowMs(),
+    });
+
+  const healthChecks = resolveHealthChecks(options);
+
   return new Elysia({ prefix: API_PREFIX })
-    .onError(({ code, set }) => {
+    .onError({ as: 'global' }, ({ code, error, set }) => {
+      if (error instanceof AppError) {
+        set.status = error.statusCode;
+        return error.toEnvelope();
+      }
+
       const details = getErrorDetails(code);
       set.status = details.statusCode;
 
       const response: ApiErrorEnvelope = details;
       return response;
     })
-    .use(createSystemRoutes(healthChecks));
+    .use(createSystemRoutes(healthChecks))
+    .use(createAuthRoutes(authService, loginRateLimiter));
 }
