@@ -73,7 +73,8 @@ Copy yang terlihat pengguna harus persis AC. `stop-slop` dipakai untuk prosa dok
 | Mulai tugas | `.claude/commands/start-task.md` | `codebase-navigation` |
 | Telusuri bug | `.claude/commands/debug-issue.md` | `codebase-navigation` |
 | Refactor tanpa ubah perilaku | `.claude/commands/refactor-safely.md` | `refactor-large-file` |
-| Review sebelum PR | `.claude/commands/review-changes.md` | `developer-pre-pr-checklist` |
+| Review sebelum PR (Author) | `.claude/commands/review-changes.md` | `developer-pre-pr-checklist` |
+| Code review PR / branch (TL Reviewer) | - | `arx-review` |
 | Commit atau push, hanya jika diminta | `.claude/commands/commit-and-push.md` | `git-commit` |
 | Tulis atau rapikan prosa | - | `stop-slop` |
 | Bukti E2E satu alur AC | - | `add-playwright-mcp-flow` |
