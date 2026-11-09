@@ -53,19 +53,22 @@ bun run db:seed
 bun run db:seed:qa
 ```
 
-### 4. Start Development Servers (Dua Terminal)
+### 4. Start Development Servers
 
-Buka dua terminal dari root repositori:
+Dari root repositori, jalankan API dan frontend sekaligus:
 
 ```bash
-# Terminal 1: Backend API (ElysiaJS)
 bun run dev
-
-# Terminal 2: Frontend SPA (SolidJS)
-bun run dev:web
 ```
 
 API tersedia di `http://localhost:3000/api/v1`, web di `http://localhost:5173`, dan health check di `http://localhost:3000/api/v1/health`.
+
+Jika ingin menjalankan proses secara terpisah, buka dua terminal:
+
+```bash
+bun run dev:api
+bun run dev:web
+```
 
 ### 5. Quality Checks
 
@@ -149,9 +152,14 @@ readonly/
 Lakukan kloning repositori, `bun install`, dan salin `.env.example` ke `.env`. Nyalakan PostgreSQL lokal dengan `docker compose -f docker/compose.yml up db -d`, lalu jalankan `bun run db:migrate` dan `bun run db:seed`.
 
 ### 2. Kerja Harian: Menjalankan Dev Server
-Buka dua terminal dari root repositori:
+Dari root repositori, jalankan keduanya sekaligus:
 ```bash
-bun run dev          # API di http://localhost:3000/api/v1
+bun run dev          # API + Web
+```
+
+Untuk menjalankan satu per satu, gunakan dua terminal:
+```bash
+bun run dev:api      # API di http://localhost:3000/api/v1
 bun run dev:web      # Web di http://localhost:5173
 ```
 
@@ -232,8 +240,9 @@ Gunakan skill `add-frontend-feature`, `impeccable`, dan `review-animations` saat
 
 ```bash
 # Server Pengembangan
-bun run dev              # Jalankan API server (localhost:3000/api/v1)
-bun run dev:web          # Jalankan Frontend SPA (localhost:5173)
+bun run dev              # Jalankan API dan Frontend bersamaan
+bun run dev:api          # Jalankan API saja (localhost:3000/api/v1)
+bun run dev:web          # Jalankan Frontend saja (localhost:5173)
 
 # Database & Seeder (PostgreSQL lokal harus aktif)
 docker compose -f docker/compose.yml up db -d

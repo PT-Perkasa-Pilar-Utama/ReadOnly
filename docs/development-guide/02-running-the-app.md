@@ -6,11 +6,11 @@
 
 # Running the App
 
-Buka dua terminal dari root repo:
+Dari root repo, jalankan `bun run dev` untuk menyalakan API dan web bersamaan. Jika ingin menjalankan satu per satu, gunakan dua terminal:
 
 | Proses | Perintah | URL |
 | --- | --- | --- |
-| API | `bun run dev` | `http://localhost:3000/api/v1` |
+| API | `bun run dev:api` | `http://localhost:3000/api/v1` |
 | Web | `bun run dev:web` | `http://localhost:5173` |
 | Health | `curl http://localhost:3000/api/v1/health` | HTTP 200 |
 

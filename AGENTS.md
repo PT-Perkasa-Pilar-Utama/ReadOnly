@@ -23,7 +23,7 @@ Nama PIC hanya dicantumkan pada kolom Owner di task breakdown; dokumen teknis la
 1. Baseline terbaru berisi 12 US dan 77 AC dari spreadsheet grooming final dan telah dipetakan ke 32 kartu di `docs/task-breakdown/`. Jangan mengarang AC; sinkronkan hanya ID dan teks yang tercantum pada sumber.
 2. Figma berstatus **belum diverifikasi** (Q-33). Copy UI mengikuti Acceptance Criteria secara verbatim.
 3. Satu kartu = satu branch = satu PR. Pola branch: `<type>/<CARD-ID>-<kebab-deskripsi>`.
-4. Commands yang sudah tersedia: `bun install`, `bun run dev`, `bun run dev:web`, `bun run build:web`, `bun run db:generate`, `bun run db:migrate`, `bun run db:seed`, `bun run db:seed:qa`, `bun run typecheck`, `bun test`, `bunx biome check .`, dan `bun run check`.
+4. Commands yang sudah tersedia: `bun install`, `bun run dev` (API + web), `bun run dev:api`, `bun run dev:web`, `bun run build:web`, `bun run db:generate`, `bun run db:migrate`, `bun run db:seed`, `bun run db:seed:qa`, `bun run typecheck`, `bun test`, `bunx biome check .`, dan `bun run check`.
 5. PR milik TL direview BE1 atau FE1 sesuai area kartu (`[ASSUMED Q-37]`).
 6. Peta skill FE, BE, dan prosa ada di bagian Local Skills and Commands pada `CLAUDE.md`.
 7. `.codex/config.toml` mendaftarkan `code-review-graph`. Klaim bukti graph hanya jika tool-nya mengembalikan hasil.

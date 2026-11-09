@@ -20,7 +20,7 @@ Scaffold minimal sudah tersedia. Fitur bisnis, koneksi DB/storage, schema Drizzl
 2. Salin `.env.example` di root menjadi `.env`. Jangan commit `.env`.
 3. Jalankan `bun install` dari root repo.
 4. Opsional: jalankan `docker compose -f docker/compose.yml up db -d` untuk PostgreSQL lokal.
-5. Buka dua terminal dari root repo dan jalankan `bun run dev` serta `bun run dev:web`.
+5. Dari root repo, jalankan `bun run dev` untuk menyalakan API dan web sekaligus. Jika ingin terpisah, gunakan `bun run dev:api` dan `bun run dev:web` di dua terminal.
 
 API dan web scaffold dapat berjalan tanpa database. Sampai adapter DB/storage ditambahkan, health check mengembalikan HTTP 200 dengan `db: "error"` dan `storage: "error"` secara default.
 

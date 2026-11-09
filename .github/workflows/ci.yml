@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+  pull_request:
+    branches:
+      - main
+      - dev
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality-and-build:
+    name: Quality & Web Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run quality gate (typecheck, unit tests, Biome)
+        run: bun run check
+
+      - name: Build web frontend
+        run: bun run build:web
+
+  database-migration-and-seed:
+    name: Database Migration & Idempotent Seed
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: readonly
+          POSTGRES_USER: readonly
+          POSTGRES_PASSWORD: seed123
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U readonly -d readonly"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      APP_ENV: test
+      TZ: Asia/Jakarta
+      DATABASE_URL: postgresql://readonly:seed123@localhost:5432/readonly
+      ADMIN_EMAIL: admin@readonly.local
+      ADMIN_PASSWORD: devadmin123!
+      BCRYPT_SALT_ROUNDS: "11"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run Drizzle migrations
+        run: bun run db:migrate
+
+      - name: Run dev seeder (pass 1 & pass 2 idempotency check)
+        run: |
+          bun run db:seed
+          bun run db:seed
+
+      - name: Run QA seeder (pass 1 & pass 2 idempotency check)
+        run: |
+          bun run db:seed:qa
+          bun run db:seed:qa

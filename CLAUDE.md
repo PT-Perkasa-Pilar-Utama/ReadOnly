@@ -40,7 +40,7 @@ Tim pengembang internal terdiri dari 3 peran engineering (ditambah QA untuk peng
 
 Skill ada di `.claude/skills/<nama>/SKILL.md`. Command ada di `.claude/commands/<nama>.md`. Baca file yang cocok **sebelum** mengubah kode. Skill tidak boleh mengalahkan `CLAUDE.md` atau dokumen di `docs/`.
 
-Seluruh skill proyek di `.claude/skills/` dan command di `.claude/commands/` telah disesuaikan untuk stack ReadOnly (ElysiaJS, SolidJS, Drizzle ORM, `bun run check`). Perintah yang sudah tersedia di root: `bun run dev`, `bun run dev:web`, `bun run build:web`, `bun run db:generate`, `bun run db:migrate`, `bun run db:seed`, `bun run db:seed:qa`, `bun run typecheck`, `bun test`, `bunx biome check .`, dan `bun run check`.
+Seluruh skill proyek di `.claude/skills/` dan command di `.claude/commands/` telah disesuaikan untuk stack ReadOnly (ElysiaJS, SolidJS, Drizzle ORM, `bun run check`). Perintah yang sudah tersedia di root: `bun run dev` (API + web), `bun run dev:api`, `bun run dev:web`, `bun run build:web`, `bun run db:generate`, `bun run db:migrate`, `bun run db:seed`, `bun run db:seed:qa`, `bun run typecheck`, `bun test`, `bunx biome check .`, dan `bun run check`.
 
 ### Backend (BE1, kartu `BE-*` dan `DB-*`)
 

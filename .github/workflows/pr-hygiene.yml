@@ -1,0 +1,61 @@
+name: PR Hygiene
+
+on:
+  pull_request:
+    branches:
+      - main
+      - dev
+    types:
+      - opened
+      - edited
+      - synchronize
+      - reopened
+
+concurrency:
+  group: pr-hygiene-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  hygiene:
+    name: PR & Branch Hygiene Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate branch name and forbidden files
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          echo "Checking PR from '${HEAD_REF}' into '${BASE_REF}'..."
+
+          # Allow release PRs from dev -> main or standard branch prefixes
+          if [[ "${HEAD_REF}" != "dev" && "${HEAD_REF}" != "main" ]]; then
+            if ! [[ "${HEAD_REF}" =~ ^(feat|feature|fix|refactor|test|docs|chore)/[A-Za-z0-9._-]+$ ]]; then
+              echo "::warning::Branch '${HEAD_REF}' does not strictly match '<type>/<CARD-ID>-<kebab-description>' (see docs/coding-standard/11-pr-hygiene.md)."
+            fi
+          fi
+
+          # Block forbidden secret, dump, or temporary lock files in the PR diff
+          CHANGED_FILES=$(git diff --name-only --diff-filter=ACMR "origin/${BASE_REF}...HEAD" || true)
+          FORBIDDEN=0
+          for file in ${CHANGED_FILES}; do
+            case "${file}" in
+              .env|.env.*|*.pem|*.key|*.sql.gz|*.dump|*'~$'*)
+                if [[ "${file}" != ".env.example" ]]; then
+                  echo "::error file=${file}::Forbidden file committed in PR: ${file}"
+                  FORBIDDEN=1
+                fi
+                ;;
+            esac
+          done
+
+          if [[ "${FORBIDDEN}" -eq 1 ]]; then
+            exit 1
+          fi
+
+          echo "PR hygiene checks passed."
