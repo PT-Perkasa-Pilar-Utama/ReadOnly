@@ -1,12 +1,13 @@
+
 import { createQuery } from '@tanstack/solid-query';
 import { For, Show } from 'solid-js';
-import { AdminHeader } from '../../components/AdminHeader';
 import {
+  type DashboardSummary,
   getDashboardSummary,
   getReturnDistribution,
   isDashboardUsingLocalFixture,
-  type DashboardSummary,
 } from '../../api/dashboard';
+import { AdminHeader } from '../../components/AdminHeader';
 import './DashboardPage.css';
 
 const METRIC_CARDS: Array<{
@@ -51,6 +52,7 @@ const numberFormatter = new Intl.NumberFormat('id-ID');
 const percentFormatter = new Intl.NumberFormat('id-ID', {
   maximumFractionDigits: 1,
 });
+
 const reportDate = new Intl.DateTimeFormat('id-ID', {
   day: 'numeric',
   month: 'long',
@@ -74,10 +76,12 @@ export function DashboardPage() {
             <h1 id="dashboard-title">Dashboard</h1>
             <p>Ringkasan laporan perpustakaan · {reportDate}</p>
           </div>
+
           <div class="dashboard-heading__actions">
             <Show when={isDashboardUsingLocalFixture}>
               <span class="dashboard-demo-label">Data demo lokal</span>
             </Show>
+
             <button
               class="dashboard-scan-button"
               type="button"
@@ -105,16 +109,22 @@ export function DashboardPage() {
 
         <Show when={summaryQuery.isError}>
           <section class="dashboard-state dashboard-state--error" role="alert">
-            {summaryQuery.error instanceof Error ? summaryQuery.error.message : ''}
+            {summaryQuery.error instanceof Error
+              ? summaryQuery.error.message
+              : ''}
           </section>
         </Show>
 
         <Show when={summaryQuery.data}>
           {(summary) => {
-            const distribution = () => getReturnDistribution(summary().pieChart);
+            const distribution = () =>
+              getReturnDistribution(summary().pieChart);
+
             const onTimeShare = () => distribution().onTimePercentage;
+
             const returnedTransactions = () =>
               summary().pieChart.onTime + summary().pieChart.late;
+
             const chartBackground = () =>
               distribution().total === 0
                 ? 'conic-gradient(var(--dashboard-chart-empty) 0% 100%)'
@@ -122,15 +132,22 @@ export function DashboardPage() {
 
             return (
               <>
-                <section class="dashboard-metrics" aria-label="Ringkasan peminjaman buku">
+                <section
+                  class="dashboard-metrics"
+                  aria-label="Ringkasan peminjaman buku"
+                >
                   <For each={METRIC_CARDS}>
                     {(metric) => (
                       <article class="dashboard-metric-card">
                         <h2>{metric.label}</h2>
+
                         <p class="dashboard-metric-card__value">
                           {numberFormatter.format(metric.value(summary()))}
                         </p>
-                        <p class="dashboard-metric-card__description">{metric.description}</p>
+
+                        <p class="dashboard-metric-card__description">
+                          {metric.description}
+                        </p>
                       </article>
                     )}
                   </For>
@@ -142,9 +159,10 @@ export function DashboardPage() {
                 >
                   <div class="dashboard-chart-heading">
                     <h2>Ketepatan Pengembalian</h2>
+
                     <p>
-                      Dari {numberFormatter.format(returnedTransactions())} transaksi yang sudah
-                      dikembalikan
+                      Dari {numberFormatter.format(returnedTransactions())}{' '}
+                      transaksi yang sudah dikembalikan
                     </p>
                   </div>
 
@@ -156,18 +174,30 @@ export function DashboardPage() {
                       style={{ background: chartBackground() }}
                     />
 
-                    <div class="dashboard-chart-legend" aria-label="Keterangan grafik">
+                    <div
+                      class="dashboard-chart-legend"
+                      role="group"
+                      aria-label="Keterangan grafik"
+                    >
                       <div class="dashboard-chart-legend__item">
                         <span
                           class="dashboard-chart-legend__dot dashboard-chart-legend__dot--on-time"
                           aria-hidden="true"
                         />
+
                         <div class="dashboard-chart-legend__copy">
                           <span>Pengembalian tepat waktu</span>
-                          <small>{numberFormatter.format(summary().pieChart.onTime)} transaksi</small>
+                          <small>
+                            {numberFormatter.format(summary().pieChart.onTime)}{' '}
+                            transaksi
+                          </small>
                         </div>
+
                         <strong>
-                          {percentFormatter.format(distribution().onTimePercentage)}%
+                          {percentFormatter.format(
+                            distribution().onTimePercentage,
+                          )}
+                          %
                         </strong>
                       </div>
 
@@ -176,12 +206,20 @@ export function DashboardPage() {
                           class="dashboard-chart-legend__dot dashboard-chart-legend__dot--late"
                           aria-hidden="true"
                         />
+
                         <div class="dashboard-chart-legend__copy">
                           <span>Pengembalian terlambat</span>
-                          <small>{numberFormatter.format(summary().pieChart.late)} transaksi</small>
+                          <small>
+                            {numberFormatter.format(summary().pieChart.late)}{' '}
+                            transaksi
+                          </small>
                         </div>
+
                         <strong>
-                          {percentFormatter.format(distribution().latePercentage)}%
+                          {percentFormatter.format(
+                            distribution().latePercentage,
+                          )}
+                          %
                         </strong>
                       </div>
                     </div>
