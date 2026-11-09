@@ -52,15 +52,15 @@ export async function seedQa(
 ): Promise<SeedCounts> {
   const now = options.clock?.now() ?? new Date();
   const adminEmail =
-    options.adminEmail ?? process.env.ADMIN_EMAIL ?? 'admin@readonly.local';
+    options.adminEmail ?? process.env.ADMIN_EMAIL ?? 'admin@readonly.ppu.co.id';
   const adminPassword =
-    options.adminPassword ?? process.env.ADMIN_PASSWORD ?? 'devadmin123!';
+    options.adminPassword ?? process.env.ADMIN_PASSWORD ?? 'password123';
   const cost =
     options.bcryptRounds ?? Number(process.env.BCRYPT_SALT_ROUNDS ?? 10);
 
   const [adminPasswordHash, memberPasswordHash] = await Promise.all([
     hashPassword(adminPassword, cost),
-    hashPassword('password', cost),
+    hashPassword('password123', cost),
   ]);
 
   await clearAllTables(db);
@@ -82,7 +82,7 @@ export async function seedQa(
       {
         id: QA_IDS.users.member1,
         fullName: 'Member Satu',
-        email: 'newmember@gmail.com',
+        email: 'member1@readonly.ppu.co.id',
         passwordHash: memberPasswordHash,
         address: 'Jl. Sudirman No. 1, Jakarta',
         phoneNumber: '081200000001',
@@ -93,7 +93,7 @@ export async function seedQa(
       {
         id: QA_IDS.users.member2,
         fullName: 'Member Dua',
-        email: 'member2@gmail.com',
+        email: 'member2@readonly.ppu.co.id',
         passwordHash: memberPasswordHash,
         address: 'Jl. Thamrin No. 2, Jakarta',
         phoneNumber: '081200000002',
@@ -104,7 +104,7 @@ export async function seedQa(
       {
         id: QA_IDS.users.inactiveMember,
         fullName: 'Member Nonaktif',
-        email: 'inactive@gmail.com',
+        email: 'inactive@readonly.ppu.co.id',
         passwordHash: memberPasswordHash,
         address: 'Jl. Gatot Subroto No. 3, Jakarta',
         phoneNumber: '081200000003',

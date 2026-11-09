@@ -19,8 +19,8 @@ Setiap variabel lingkungan beranotasi. Nilai rahasia (secret) **tidak boleh** ad
 | `TZ` | `Asia/Jakarta` | `UTC` | `Asia/Jakarta` | `Asia/Jakarta` | Container; timestamp disimpan UTC |
 | `CORS_ORIGIN` | `http://localhost:5173` | `http://localhost:5173` | `https://readonly.example.com` | `https://readonly.example.com` | Satu origin, bukan `*` (SEC-08) |
 | `LOG_LEVEL` | `debug` | `info` | `info` | `warn` | Tidak menyimpan PII (SEC-15) |
-| `ADMIN_EMAIL` | `admin@readonly.local` | `admin@readonly.local` | dari secret store | dari secret store | Kredensial Admin Perpus seeder (Q-02) |
-| `ADMIN_PASSWORD` | `devadmin123!` (ubah di staging/prod) | `ciadmin123!` | dari secret store | dari secret store | Bawaan seeder; **wajib diubah** di staging/prod |
+| `ADMIN_EMAIL` | `admin@readonly.ppu.co.id` | `admin@readonly.ppu.co.id` | dari secret store | dari secret store | Kredensial Admin Perpus seeder (Q-02) |
+| `ADMIN_PASSWORD` | `password123` (ubah di staging/prod) | `password123` | dari secret store | dari secret store | Bawaan seeder; **wajib diubah** di staging/prod |
 | `BCRYPT_SALT_ROUNDS` | `11` | `10` | `11` | `12` | Kekuatan hash (SEC-01) |
 | `QR_RATE_LIMIT_WINDOW_MIN` | `10` | `10` | `10` | `5` | Menit untuk rate limit scan QR (SEC-06) |
 | `LOGIN_RATE_LIMIT` | `5` | `5` | `5` | `5` | Percobaan gagal per window (SEC-06) |
@@ -33,7 +33,7 @@ Di production: `APP_ENV=production`, `ENABLE_RESET_API` **tidak ada** (off). Rou
 
 ## Konstanta bisnis (bukan variabel lingkungan)
 
-Konstanta berikut **tidak boleh** jadi environment variable; letaknya di `packages/shared/constants.ts`:
+Konstanta berikut **tidak boleh** jadi environment variable; letaknya di `packages/shared/src/constants.ts`:
 
 - Masa pinjam: **7 hari**
 - Reminder: **3 hari** sebelum batas
@@ -43,7 +43,7 @@ Konstanta berikut **tidak boleh** jadi environment variable; letaknya di `packag
 
 ## Konfigurasi seed Admin
 
-Seed dev dan seed QA membaca kredensial Admin Perpus dari `ADMIN_EMAIL`/`ADMIN_PASSWORD` (Q-02). Seed dev dan seed QA bersifat idempoten dan dikontrol versi di `packages/db/seeds/`.
+Seed dev dan seed QA membaca kredensial Admin Perpus dari `ADMIN_EMAIL`/`ADMIN_PASSWORD` (Q-02). Seed dev dan seed QA bersifat idempoten dan dikontrol versi di `packages/db/src/seeds/`.
 
 ## Cross-References
 

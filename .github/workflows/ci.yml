@@ -57,8 +57,8 @@ jobs:
       APP_ENV: test
       TZ: Asia/Jakarta
       DATABASE_URL: postgresql://readonly:seed123@localhost:5432/readonly
-      ADMIN_EMAIL: admin@readonly.local
-      ADMIN_PASSWORD: devadmin123!
+      ADMIN_EMAIL: admin@readonly.ppu.co.id
+      ADMIN_PASSWORD: password123
       BCRYPT_SALT_ROUNDS: "11"
     steps:
       - name: Checkout repository

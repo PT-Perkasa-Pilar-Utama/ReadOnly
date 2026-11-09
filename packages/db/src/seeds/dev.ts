@@ -30,15 +30,15 @@ export async function seedDev(
 ): Promise<SeedCounts> {
   const now = options.clock?.now() ?? new Date();
   const adminEmail =
-    options.adminEmail ?? process.env.ADMIN_EMAIL ?? 'admin@readonly.local';
+    options.adminEmail ?? process.env.ADMIN_EMAIL ?? 'admin@readonly.ppu.co.id';
   const adminPassword =
-    options.adminPassword ?? process.env.ADMIN_PASSWORD ?? 'devadmin123!';
+    options.adminPassword ?? process.env.ADMIN_PASSWORD ?? 'password123';
   const cost =
     options.bcryptRounds ?? Number(process.env.BCRYPT_SALT_ROUNDS ?? 10);
 
   const [adminPasswordHash, memberPasswordHash] = await Promise.all([
     hashPassword(adminPassword, cost),
-    hashPassword('password', cost),
+    hashPassword('password123', cost),
   ]);
 
   await clearAllTables(db);
@@ -52,7 +52,7 @@ export async function seedDev(
         fullName: 'Admin Perpus',
         email: adminEmail,
         passwordHash: adminPasswordHash,
-        address: 'Jl. Gatot Subroto Kav. 10, Jakarta Selatan',
+        address: 'Jl. Gatot Subroto Kav. 10, Jakarta Selatan''Jl. Gatot Subroto Kav. 10, Jakarta Selatan',
         phoneNumber: '081100000001',
         role: 'admin',
         status: 'active',
@@ -61,7 +61,7 @@ export async function seedDev(
       {
         id: QA_IDS.users.member1,
         fullName: 'Member Satu',
-        email: 'newmember@gmail.com',
+        email: 'member1@readonly.ppu.co.id',
         passwordHash: memberPasswordHash,
         address: 'Jl. Sudirman No. 1, Jakarta Pusat',
         phoneNumber: '081200000001',
@@ -72,7 +72,7 @@ export async function seedDev(
       {
         id: QA_IDS.users.member2,
         fullName: 'Budi Santoso',
-        email: 'member2@gmail.com',
+        email: 'member2@readonly.ppu.co.id',
         passwordHash: memberPasswordHash,
         address: 'Jl. Thamrin No. 12, Jakarta Pusat',
         phoneNumber: '081200000002',
@@ -83,7 +83,7 @@ export async function seedDev(
       {
         id: DEV_EXTRA_USER_ID,
         fullName: 'Siti Rahmawati',
-        email: 'member3@gmail.com',
+        email: 'member3@readonly.ppu.co.id',
         passwordHash: memberPasswordHash,
         address: 'Jl. Kuningan Barat No. 8, Jakarta Selatan',
         phoneNumber: '081200000003',
@@ -94,7 +94,7 @@ export async function seedDev(
       {
         id: QA_IDS.users.inactiveMember,
         fullName: 'Andi Pratama (Nonaktif)',
-        email: 'inactive@gmail.com',
+        email: 'inactive@readonly.ppu.co.id',
         passwordHash: memberPasswordHash,
         address: 'Jl. Rasuna Said No. 5, Jakarta Selatan',
         phoneNumber: '081200000004',
@@ -136,7 +136,7 @@ export async function seedDev(
       {
         id: QA_IDS.genres.sains,
         name: 'Sains',
-        status: 'inactive',
+        status: 'inactiveinactive',
         createdAt: now,
       },
     ])
@@ -222,7 +222,7 @@ export async function seedDev(
     { bookId: QA_IDS.books.bookB, genreId: QA_IDS.genres.teknologi },
     { bookId: QA_IDS.books.bookC, genreId: QA_IDS.genres.bisnis },
     { bookId: QA_IDS.books.bookD, genreId: QA_IDS.genres.sejarah },
-    { bookId: QA_IDS.books.bookE, genreId: QA_IDS.genres.fiksi },
+    { bookId: QA_IDS.books.bookEbookE, genreId: QA_IDS.genres.fiksifiksi },
   ]);
 
   const duePlus3 = addDaysWibDateString(now, 3);
@@ -383,8 +383,8 @@ export async function seedDev(
     users: insertedUsers.length,
     genres: insertedGenres.length,
     books: insertedBooks.length,
-    loans: insertedLoans.length,
-    notifications: insertedNotifications.length,
-    ratings: insertedRatings.length,
+    loans: insertedLoans.lengthinsertedLoans.length,
+    notifications: insertedNotifications.lengthinsertedNotifications.length,
+    ratings: insertedRatings.lengthinsertedRatings.length,
   };
 }
