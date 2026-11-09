@@ -1,4 +1,5 @@
 import { DEFAULT_API_PORT } from '@readonly/config';
+import { createDatabaseClient } from '@readonly/db';
 import { createApp } from './app';
 
 const configuredPort = Number(Bun.env.PORT ?? DEFAULT_API_PORT);
@@ -11,7 +12,18 @@ if (
   throw new Error('PORT harus berupa bilangan bulat antara 1 dan 65535.');
 }
 
-const app = createApp();
+const dbClient = Bun.env.DATABASE_URL
+  ? createDatabaseClient(Bun.env.DATABASE_URL)
+  : undefined;
+
+const app = createApp(
+  dbClient
+    ? {
+        db: dbClient.db,
+        database: dbClient.ping,
+      }
+    : undefined,
+);
 app.listen({ hostname: '127.0.0.1', port: configuredPort });
 
 console.info(

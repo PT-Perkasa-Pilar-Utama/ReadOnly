@@ -48,12 +48,12 @@ Base: `/api/v1`
 
 | Operation | Method/Path | Access | Status |
 | --- | --- | --- | --- |
-| Register validate | POST /auth/register/validate | publik | TODO |
-| Register | POST /auth/register | publik | TODO |
+| Register validate | POST /auth/register/validate | publik | OK |
+| Register | POST /auth/register | publik | OK |
 | Login | POST /auth/login | publik | TODO |
 | Logout | POST /auth/logout | login | TODO |
 | Me | GET /auth/me | login | TODO |
-| Genres aktif | GET /genres | publik | TODO |
+| Genres aktif | GET /genres | publik | OK |
 | Admin genre list/search | GET /admin/genres | admin | TODO |
 | Add genre | POST /admin/genres | admin | TODO |
 | Edit/status genre | PATCH /admin/genres/:id | admin | TODO |
