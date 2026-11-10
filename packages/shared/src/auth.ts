@@ -33,6 +33,12 @@ export const API_MESSAGES = {
   UNAUTHORIZED: 'Silahkan login', // [ASSUMED Q-04]
   FORBIDDEN: 'Akses ditolak.',
   RATE_LIMIT_EXCEEDED: 'Terlalu banyak percobaan login', // [COPY-TBD Q-04]
+  BOOK_ADDED: 'Buku berhasil ditambahkan',
+  BOOK_UPDATED: 'Buku berhasil diubah',
+  BOOK_DELETED: 'Buku berhasil dihapus',
+  BOOK_DELETE_ACTIVE_LOANS: 'Buku tidak dapat dihapus karena masih dipinjam',
+  COVER_INVALID_FORMAT: 'Format file cover buku tidak sesuai',
+  COVER_SIZE_LIMIT: 'Ukuran file cover buku tidak boleh lebih dari 5Mb',
 } as const;
 
 export const genreItemSchema = z.object({

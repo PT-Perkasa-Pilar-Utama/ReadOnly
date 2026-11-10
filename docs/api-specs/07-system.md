@@ -65,10 +65,10 @@ Base: `/api/v1`
 | Change user status | PATCH /admin/users/:id/status | admin | TODO |
 | Catalog Home | GET /books | login | TODO |
 | Book detail | GET /books/:id | login | TODO |
-| Admin books list | GET /admin/books | admin | TODO |
-| Add book | POST /admin/books | admin | TODO |
-| Edit book | PATCH /admin/books/:id | admin | TODO |
-| Delete book | DELETE /admin/books/:id | admin | TODO |
+| Admin books list | GET /admin/books | admin | OK |
+| Add book | POST /admin/books | admin | OK |
+| Edit book | PATCH /admin/books/:id | admin | OK |
+| Delete book | DELETE /admin/books/:id | admin | OK |
 | Ajukan peminjaman | POST /loans | member | TODO |
 | Loans me | GET /loans/me | member | TODO |
 | QR token | GET /loans/:id/qr | member | TODO |
