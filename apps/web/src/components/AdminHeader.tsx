@@ -5,12 +5,7 @@ import { notify } from './Feedback';
 import Icon from './Icon';
 import './AdminHeader.css';
 
-type AdminSection =
-  | 'dashboard'
-  | 'books'
-  | 'loans'
-  | 'genres'
-  | 'users';
+type AdminSection = 'dashboard' | 'books' | 'loans' | 'genres' | 'users';
 
 const ADMIN_NAVIGATION = [
   {
