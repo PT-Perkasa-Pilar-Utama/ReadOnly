@@ -8,7 +8,13 @@ import { Elysia } from 'elysia';
 import { createNotFoundError, fromZodError } from '../../shared/errors';
 import { requireRole } from '../auth/auth.routes';
 import type { AuthService } from '../auth/auth.service';
-import { adminBooksQuerySchema, validateBookFormData } from './books.schema';
+import {
+  adminBooksQuerySchema,
+  adminGenresQuerySchema,
+  createGenreInputSchema,
+  updateGenreInputSchema,
+  validateBookFormData,
+} from './books.schema';
 import type { BooksService } from './books.service';
 
 const SAFE_FILENAME_REGEX = /^[a-zA-Z0-9_.-]+$/;
@@ -97,5 +103,58 @@ export function createBooksRoutes(
       }
 
       return booksService.deleteBook(id);
+    })
+    .get('/admin/genres', async ({ query, request }) => {
+      if (authService) {
+        await requireRole(request, authService, 'admin');
+      }
+
+      const parsed = adminGenresQuerySchema.safeParse(query);
+      if (!parsed.success) {
+        throw fromZodError(parsed.error);
+      }
+
+      return booksService.listAdminGenres(parsed.data);
+    })
+    .post('/admin/genres', async ({ body, request, set }) => {
+      if (authService) {
+        await requireRole(request, authService, 'admin');
+      }
+
+      const parsed = createGenreInputSchema.safeParse(body);
+      if (!parsed.success) {
+        throw fromZodError(parsed.error);
+      }
+
+      const result = await booksService.createGenre(parsed.data);
+      set.status = 201;
+      return result;
+    })
+    .patch('/admin/genres/:id', async ({ body, params: { id }, request }) => {
+      if (authService) {
+        await requireRole(request, authService, 'admin');
+      }
+
+      if (!UUID_REGEX.test(id)) {
+        throw createNotFoundError('Genre tidak ditemukan.');
+      }
+
+      const parsed = updateGenreInputSchema.safeParse(body);
+      if (!parsed.success) {
+        throw fromZodError(parsed.error);
+      }
+
+      return booksService.updateGenre(id, parsed.data);
+    })
+    .delete('/admin/genres/:id', async ({ params: { id }, request }) => {
+      if (authService) {
+        await requireRole(request, authService, 'admin');
+      }
+
+      if (!UUID_REGEX.test(id)) {
+        throw createNotFoundError('Genre tidak ditemukan.');
+      }
+
+      return booksService.deleteGenre(id);
     });
 }
