@@ -5,10 +5,20 @@ import { notify } from './Feedback';
 import Icon from './Icon';
 import './AdminHeader.css';
 
-type AdminSection = 'dashboard' | 'books' | 'loans' | 'genres' | 'users';
+type AdminSection =
+  | 'dashboard'
+  | 'books'
+  | 'loans'
+  | 'genres'
+  | 'users';
 
 const ADMIN_NAVIGATION = [
-  { label: 'Dashboard', section: 'dashboard', href: '/', available: true },
+  {
+    label: 'Dashboard',
+    section: 'dashboard',
+    href: '/',
+    available: true,
+  },
   {
     label: 'Master Buku',
     section: 'books',
@@ -27,7 +37,6 @@ const ADMIN_NAVIGATION = [
     href: '/admin/genres',
     available: true,
   },
-  // AC-12.01: Management User dapat dibuka dari seluruh halaman Admin.
   {
     label: 'Management User',
     section: 'users',
