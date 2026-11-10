@@ -64,8 +64,6 @@ export function DashboardPage() {
     staleTime: 30_000,
   }));
 
-  const handleScanQr = () => undefined;
-
   return (
     <div class="dashboard-app">
       <AdminHeader activeSection="dashboard" />
@@ -82,7 +80,8 @@ export function DashboardPage() {
               class="dashboard-scan-button"
               type="button"
               aria-label="Scan QR"
-              onClick={handleScanQr}
+              disabled
+              title="Pemindai QR menunggu penetapan pustaka pada keputusan Q-18"
             >
               <svg
                 class="dashboard-scan-button__icon"
