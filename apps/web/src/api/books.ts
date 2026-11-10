@@ -74,13 +74,11 @@ export async function getAdminBooks(
   query: AdminBookQuery,
   signal?: AbortSignal,
 ): Promise<AdminBookList> {
-  const page = query.page ?? 1;
-  const limit = query.limit ?? 10;
-
   const response = await apiGetResponse<AdminBook[]>(
     makeQueryPath(query),
     signal,
   );
+
   if (!response.pagination || !response.authors) {
     throw new ApiRequestError(
       502,

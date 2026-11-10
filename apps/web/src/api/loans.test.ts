@@ -53,9 +53,7 @@ describe('Manajemen Peminjaman API', () => {
   });
 
   test('menolak daftar peminjaman tanpa metadata paginasi dari backend', async () => {
-    spyOn(globalThis, 'fetch').mockResolvedValue(
-      Response.json({ data: [] }),
-    );
+    spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ data: [] }));
 
     await expect(getAdminLoans()).rejects.toMatchObject({
       statusCode: 502,

@@ -23,64 +23,54 @@ function coverFile(
 }
 
 describe('Master Buku frontend helpers', () => {
-  test(
-    'mengambil daftar buku, filter, penulis, dan paginasi dari backend',
-    async () => {
-      const book: AdminBook = {
-        id: 'book-1',
-        title: 'Bumi Manusia',
-        author: 'Pramoedya Ananta Toer',
-        publisher: 'Lentera Dipantara',
-        publication_year: 1980,
-        synopsis: 'Novel sejarah.',
-        cover_url: null,
-        genres: [{ id: 'genre-1', name: 'Fiksi', status: 'active' }],
-        available_count: 3,
-        is_available: true,
-        availability_label: 'Tersedia',
-      };
-      const fetchMock = spyOn(globalThis, 'fetch').mockResolvedValue(
-        Response.json({
-          data: [book],
-          authors: ['Pramoedya Ananta Toer'],
-          pagination: { page: 2, limit: 10, total: 11, totalPages: 2 },
-        }),
-      );
-
-      await expect(
-        getAdminBooks({
-          q: 'Bumi',
-          author: 'Pramoedya Ananta Toer',
-          genre: 'genre-1',
-          page: 2,
-          limit: 10,
-        }),
-      ).resolves.toEqual({
-        books: [book],
+  test('mengambil daftar buku, filter, penulis, dan paginasi dari backend', async () => {
+    const book: AdminBook = {
+      id: 'book-1',
+      title: 'Bumi Manusia',
+      author: 'Pramoedya Ananta Toer',
+      publisher: 'Lentera Dipantara',
+      publication_year: 1980,
+      synopsis: 'Novel sejarah.',
+      cover_url: null,
+      genres: [{ id: 'genre-1', name: 'Fiksi', status: 'active' }],
+      available_count: 3,
+      is_available: true,
+      availability_label: 'Tersedia',
+    };
+    const fetchMock = spyOn(globalThis, 'fetch').mockResolvedValue(
+      Response.json({
+        data: [book],
         authors: ['Pramoedya Ananta Toer'],
         pagination: { page: 2, limit: 10, total: 11, totalPages: 2 },
-      });
-      expect(fetchMock.mock.calls[0]?.[0]).toBe(
-        '/api/v1/admin/books?q=Bumi&author=Pramoedya+Ananta+Toer&genre=genre-1&page=2&limit=10',
-      );
-    },
-  );
+      }),
+    );
 
-  test(
-    'menolak daftar buku tanpa metadata paginasi dan penulis dari backend',
-    async () => {
-      spyOn(globalThis, 'fetch').mockResolvedValue(
-        Response.json({ data: [] }),
-      );
+    await expect(
+      getAdminBooks({
+        q: 'Bumi',
+        author: 'Pramoedya Ananta Toer',
+        genre: 'genre-1',
+        page: 2,
+        limit: 10,
+      }),
+    ).resolves.toEqual({
+      books: [book],
+      authors: ['Pramoedya Ananta Toer'],
+      pagination: { page: 2, limit: 10, total: 11, totalPages: 2 },
+    });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      '/api/v1/admin/books?q=Bumi&author=Pramoedya+Ananta+Toer&genre=genre-1&page=2&limit=10',
+    );
+  });
 
-      await expect(
-        getAdminBooks({ page: 1, limit: 10 }),
-      ).rejects.toMatchObject({
-        statusCode: 502,
-        code: 'invalid_response',
-      });
-    },
-  );
+  test('menolak daftar buku tanpa metadata paginasi dan penulis dari backend', async () => {
+    spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ data: [] }));
+
+    await expect(getAdminBooks({ page: 1, limit: 10 })).rejects.toMatchObject({
+      statusCode: 502,
+      code: 'invalid_response',
+    });
+  });
 
   test('mengambil pilihan genre aktif dari endpoint yang tersedia', async () => {
     const fetchMock = spyOn(globalThis, 'fetch').mockResolvedValue(
