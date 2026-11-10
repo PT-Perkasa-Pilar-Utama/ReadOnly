@@ -154,6 +154,28 @@ export function createRateLimitError(
   });
 }
 
+export function createCannotDeactivateSelfError(
+  message: string = API_MESSAGES.CANNOT_DEACTIVATE_SELF,
+): AppError {
+  return new AppError({
+    statusCode: 403,
+    error: 'Forbidden',
+    code: 'cannot_deactivate_self',
+    message,
+  });
+}
+
+export function createAccountHasActiveLoansError(
+  message: string = API_MESSAGES.ACCOUNT_HAS_ACTIVE_LOANS,
+): AppError {
+  return new AppError({
+    statusCode: 409,
+    error: 'Conflict',
+    code: 'account_has_active_loans',
+    message,
+  });
+}
+
 export function fromZodError(error: z.ZodError): AppError {
   const firstIssue = error.issues[0];
   const rawField = firstIssue?.path[0];

@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { USER_ROLES, type UserRole } from './constants';
+import {
+  USER_ROLES,
+  USER_STATUSES,
+  type UserRole,
+  type UserStatus,
+} from './constants';
 
 export const PASSWORD_MIN_LENGTH = 8;
 export const MAX_TEXT_FIELD_LENGTH = 255;
@@ -47,6 +52,14 @@ export const API_MESSAGES = {
   GENRE_DEACTIVATED: 'Genre berhasil dinonaktifkan',
   GENRE_ACTIVATED: 'Genre berhasil diaktifkan',
   GENRE_DELETED: 'Genre berhasil dihapus',
+  ADMIN_USER_ADDED: 'Admin berhasil ditambahkan',
+  USER_UPDATED: 'Data user berhasil diubah',
+  ACCOUNT_DEACTIVATED: 'Akun berhasil dinonaktifkan',
+  ACCOUNT_ACTIVATED: 'Akun berhasil diaktifkan',
+  CANNOT_DEACTIVATE_SELF: 'Admin tidak dapat menonaktifkan akunnya sendiri',
+  ACCOUNT_HAS_ACTIVE_LOANS:
+    'Akun tidak dapat dinonaktifkan karena masih memiliki peminjaman aktif',
+  USER_NOT_FOUND_404: 'User tidak ditemukan.',
 } as const;
 
 export const genreItemSchema = z.object({
@@ -359,3 +372,196 @@ export const authMeResponseDataSchema = z.object({
   role: z.enum(USER_ROLES),
   email: z.string().min(1),
 });
+
+export const adminUserListItemSchema = z.object({
+  id: z.string().regex(UUID_REGEX),
+  full_name: z.string().min(1),
+  email: z.string().email(),
+  phone_number: z.string().min(1),
+  role: z.enum(USER_ROLES),
+  status: z.enum(USER_STATUSES),
+});
+
+export type AdminUserListItem = z.infer<typeof adminUserListItemSchema>;
+
+export const adminUsersQuerySchema = z.object({
+  q: z.string().optional(),
+  role: z
+    .string()
+    .optional()
+    .transform((val) => {
+      if (val === undefined || val === '') return undefined;
+      return val;
+    })
+    .pipe(z.enum(USER_ROLES).optional()),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(50).default(10),
+});
+
+export type AdminUsersQuery = z.infer<typeof adminUsersQuerySchema>;
+
+export const adminUserDetailResponseDataSchema = z.object({
+  id: z.string().regex(UUID_REGEX),
+  full_name: z.string().min(1),
+  email: z.string().email(),
+  phone_number: z.string().min(1),
+  address: z.string().nullable(),
+  role: z.enum(USER_ROLES),
+  status: z.enum(USER_STATUSES),
+});
+
+export type AdminUserDetailResponseData = z.infer<
+  typeof adminUserDetailResponseDataSchema
+>;
+
+export interface CreateAdminUserInput {
+  full_name: string;
+  email: string;
+  phone_number: string;
+  password: string;
+  confirm_password: string;
+}
+
+export const createAdminUserResponseDataSchema = z.object({
+  id: z.string().regex(UUID_REGEX),
+  full_name: z.string().min(1),
+  email: z.string().email(),
+  phone_number: z.string().min(1),
+  role: z.literal('admin'),
+  status: z.literal('active'),
+});
+
+export type CreateAdminUserResponseData = z.infer<
+  typeof createAdminUserResponseDataSchema
+>;
+
+const CREATE_ADMIN_REQUIRED_FIELDS = [
+  'full_name',
+  'email',
+  'phone_number',
+  'password',
+  'confirm_password',
+] as const;
+
+export const createAdminUserSchema = z
+  .unknown()
+  .transform((input, ctx): CreateAdminUserInput => {
+    if (!isRecord(input)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['full_name'],
+        message: API_MESSAGES.FIELD_REQUIRED,
+      });
+      return z.NEVER;
+    }
+
+    for (const field of CREATE_ADMIN_REQUIRED_FIELDS) {
+      const value = input[field];
+      if (typeof value !== 'string' || value.trim().length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [field],
+          message: API_MESSAGES.FIELD_REQUIRED,
+        });
+        return z.NEVER;
+      }
+    }
+
+    const fullName = (input.full_name as string).trim();
+    const email = (input.email as string).trim().toLowerCase();
+    const phoneNumber = (input.phone_number as string).trim();
+    const password = input.password as string;
+    const confirmPassword = input.confirm_password as string;
+
+    if (fullName.length > MAX_TEXT_FIELD_LENGTH) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['full_name'],
+        message: API_MESSAGES.FIELD_REQUIRED,
+      });
+      return z.NEVER;
+    }
+
+    if (
+      email.length > MAX_TEXT_FIELD_LENGTH ||
+      !EMAIL_CHECK_SCHEMA.safeParse(email).success
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['email'],
+        message: API_MESSAGES.INVALID_EMAIL_FORMAT,
+      });
+      return z.NEVER;
+    }
+
+    if (phoneNumber.length > MAX_PHONE_NUMBER_LENGTH) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['phone_number'],
+        message: API_MESSAGES.FIELD_REQUIRED,
+      });
+      return z.NEVER;
+    }
+
+    if (password !== confirmPassword) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['confirm_password'],
+        message: API_MESSAGES.PASSWORD_MISMATCH,
+      });
+      return z.NEVER;
+    }
+
+    if (
+      password.length < PASSWORD_MIN_LENGTH ||
+      password.length > MAX_TEXT_FIELD_LENGTH
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['password'],
+        message: API_MESSAGES.FIELD_REQUIRED,
+      });
+      return z.NEVER;
+    }
+
+    return {
+      full_name: fullName,
+      email,
+      phone_number: phoneNumber,
+      password,
+      confirm_password: confirmPassword,
+    };
+  });
+
+export interface UpdateUserResponseData {
+  id: string;
+  full_name: string;
+  phone_number: string;
+  address: string | null;
+  role: UserRole;
+}
+
+export const updateUserResponseDataSchema = z.object({
+  id: z.string().regex(UUID_REGEX),
+  full_name: z.string().min(1),
+  phone_number: z.string().min(1),
+  address: z.string().nullable(),
+  role: z.enum(USER_ROLES),
+});
+
+export const updateUserStatusSchema = z.object({
+  status: z.enum(USER_STATUSES),
+});
+
+export type UpdateUserStatusInput = z.infer<typeof updateUserStatusSchema>;
+
+export const updateUserStatusResponseDataSchema = z.object({
+  id: z.string().regex(UUID_REGEX),
+  status: z.enum(USER_STATUSES),
+});
+
+export type UpdateUserStatusResponseData = z.infer<
+  typeof updateUserStatusResponseDataSchema
+>;
+
+export type { UserStatus };

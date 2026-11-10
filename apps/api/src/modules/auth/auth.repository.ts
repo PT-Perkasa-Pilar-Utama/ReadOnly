@@ -2,13 +2,20 @@ import { randomUUID } from 'node:crypto';
 import {
   type Database,
   genres,
+  loans,
   QA_IDS,
   sessions,
   userGenres,
   users,
 } from '@readonly/db';
-import type { UserRole, UserStatus } from '@readonly/shared';
-import { and, eq, gt, inArray, sql } from 'drizzle-orm';
+import type {
+  AdminUserListItem,
+  AdminUsersQuery,
+  LoanStatus,
+  UserRole,
+  UserStatus,
+} from '@readonly/shared';
+import { and, desc, eq, gt, ilike, inArray, ne, or, sql } from 'drizzle-orm';
 
 export interface CreateMemberInput {
   fullName: string;
@@ -57,6 +64,41 @@ export interface CreateSessionInput {
   createdAt: Date;
 }
 
+export interface UserDetailRecord {
+  id: string;
+  fullName: string;
+  email: string;
+  passwordHash: string;
+  address: string | null;
+  phoneNumber: string;
+  role: UserRole;
+  status: UserStatus;
+  createdAt: Date;
+}
+
+export interface CreateAdminUserInputInternal {
+  fullName: string;
+  email: string;
+  passwordHash: string;
+  phoneNumber: string;
+  createdAt: Date;
+}
+
+export type CreateAdminUserResult =
+  | {
+      status: 'created';
+      user: AdminUserListItem;
+    }
+  | {
+      status: 'email_conflict';
+    };
+
+export interface UpdateUserData {
+  fullName: string;
+  phoneNumber: string;
+  address?: string | null;
+}
+
 export interface AuthRepository {
   existsByEmail(email: string): Promise<boolean>;
   createMemberWithGenres(input: CreateMemberInput): Promise<CreateMemberResult>;
@@ -67,6 +109,22 @@ export interface AuthRepository {
     now: Date,
   ): Promise<AuthenticatedUser | null>;
   deleteSessionByTokenHash(tokenHash: string): Promise<boolean>;
+  listUsers(
+    params: AdminUsersQuery,
+  ): Promise<{ items: AdminUserListItem[]; total: number }>;
+  findUserById(id: string): Promise<UserDetailRecord | null>;
+  createAdminUser(
+    input: CreateAdminUserInputInternal,
+  ): Promise<CreateAdminUserResult>;
+  updateUser(
+    id: string,
+    data: UpdateUserData,
+  ): Promise<UserDetailRecord | null>;
+  hasActiveLoans(userId: string): Promise<boolean>;
+  updateUserStatus(
+    id: string,
+    status: UserStatus,
+  ): Promise<UserDetailRecord | null>;
 }
 
 function isPostgresUniqueViolation(error: unknown): boolean {
@@ -230,6 +288,207 @@ export class DrizzleAuthRepository implements AuthRepository {
 
     return deleted.length > 0;
   }
+
+  async listUsers(
+    params: AdminUsersQuery,
+  ): Promise<{ items: AdminUserListItem[]; total: number }> {
+    const conditions = [];
+
+    if (params.q && params.q.trim().length > 0) {
+      const pattern = `%${params.q.trim()}%`;
+      const searchCondition = or(
+        ilike(users.fullName, pattern),
+        ilike(users.email, pattern),
+      );
+      if (searchCondition) {
+        conditions.push(searchCondition);
+      }
+    }
+
+    if (params.role) {
+      conditions.push(eq(users.role, params.role));
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const [{ count }] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(users)
+      .where(whereClause);
+
+    const total = Number(count);
+    if (total === 0) {
+      return { items: [], total: 0 };
+    }
+
+    const rows = await this.db
+      .select({
+        id: users.id,
+        fullName: users.fullName,
+        email: users.email,
+        phoneNumber: users.phoneNumber,
+        role: users.role,
+        status: users.status,
+      })
+      .from(users)
+      .where(whereClause)
+      .orderBy(desc(users.createdAt), desc(users.id))
+      .limit(params.limit)
+      .offset((params.page - 1) * params.limit);
+
+    const items: AdminUserListItem[] = rows.map((r) => ({
+      id: r.id,
+      full_name: r.fullName,
+      email: r.email,
+      phone_number: r.phoneNumber,
+      role: r.role,
+      status: r.status,
+    }));
+
+    return { items, total };
+  }
+
+  async findUserById(id: string): Promise<UserDetailRecord | null> {
+    const [row] = await this.db
+      .select({
+        id: users.id,
+        fullName: users.fullName,
+        email: users.email,
+        passwordHash: users.passwordHash,
+        address: users.address,
+        phoneNumber: users.phoneNumber,
+        role: users.role,
+        status: users.status,
+        createdAt: users.createdAt,
+      })
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1);
+
+    return row ?? null;
+  }
+
+  async createAdminUser(
+    input: CreateAdminUserInputInternal,
+  ): Promise<CreateAdminUserResult> {
+    const normalizedEmail = input.email.trim().toLowerCase();
+
+    try {
+      return await this.db.transaction(async (tx) => {
+        const existing = await tx
+          .select({ id: users.id })
+          .from(users)
+          .where(sql`lower(${users.email}) = ${normalizedEmail}`)
+          .limit(1);
+
+        if (existing.length > 0) {
+          return { status: 'email_conflict' } as const;
+        }
+
+        const [created] = await tx
+          .insert(users)
+          .values({
+            fullName: input.fullName,
+            email: normalizedEmail,
+            passwordHash: input.passwordHash,
+            phoneNumber: input.phoneNumber,
+            address: null,
+            role: 'admin',
+            status: 'active',
+            createdAt: input.createdAt,
+          })
+          .returning({
+            id: users.id,
+            fullName: users.fullName,
+            email: users.email,
+            phoneNumber: users.phoneNumber,
+            role: users.role,
+            status: users.status,
+          });
+
+        if (!created) {
+          throw new Error('Failed to insert admin user row.');
+        }
+
+        return {
+          status: 'created' as const,
+          user: {
+            id: created.id,
+            full_name: created.fullName,
+            email: created.email,
+            phone_number: created.phoneNumber,
+            role: created.role,
+            status: created.status,
+          },
+        };
+      });
+    } catch (error) {
+      if (isPostgresUniqueViolation(error)) {
+        return { status: 'email_conflict' };
+      }
+      throw error;
+    }
+  }
+
+  async updateUser(
+    id: string,
+    data: UpdateUserData,
+  ): Promise<UserDetailRecord | null> {
+    const [updated] = await this.db
+      .update(users)
+      .set({
+        fullName: data.fullName,
+        phoneNumber: data.phoneNumber,
+        ...(data.address !== undefined ? { address: data.address } : {}),
+      })
+      .where(eq(users.id, id))
+      .returning({
+        id: users.id,
+        fullName: users.fullName,
+        email: users.email,
+        passwordHash: users.passwordHash,
+        address: users.address,
+        phoneNumber: users.phoneNumber,
+        role: users.role,
+        status: users.status,
+        createdAt: users.createdAt,
+      });
+
+    return updated ?? null;
+  }
+
+  async hasActiveLoans(userId: string): Promise<boolean> {
+    const activeLoans = await this.db
+      .select({ id: loans.id })
+      .from(loans)
+      .where(and(eq(loans.userId, userId), ne(loans.status, 'RETURNED')))
+      .limit(1);
+
+    return activeLoans.length > 0;
+  }
+
+  async updateUserStatus(
+    id: string,
+    status: UserStatus,
+  ): Promise<UserDetailRecord | null> {
+    const [updated] = await this.db
+      .update(users)
+      .set({ status })
+      .where(eq(users.id, id))
+      .returning({
+        id: users.id,
+        fullName: users.fullName,
+        email: users.email,
+        passwordHash: users.passwordHash,
+        address: users.address,
+        phoneNumber: users.phoneNumber,
+        role: users.role,
+        status: users.status,
+        createdAt: users.createdAt,
+      });
+
+    return updated ?? null;
+  }
 }
 
 export interface InMemoryUserRecord {
@@ -256,6 +515,20 @@ export interface InMemorySessionRecord {
   expiresAt: Date;
   createdAt: Date;
 }
+
+export interface InMemoryLoanRecord {
+  id: string;
+  userId: string;
+  status: LoanStatus;
+}
+
+const DEFAULT_IN_MEMORY_AUTH_LOANS: InMemoryLoanRecord[] = [
+  {
+    id: QA_IDS.loans.pending,
+    userId: QA_IDS.users.member1,
+    status: 'PENDING',
+  },
+];
 
 const HASH_PASSWORD_FIXTURE = Bun.password.hashSync('password', {
   algorithm: 'bcrypt',
@@ -346,11 +619,13 @@ export class InMemoryAuthRepository implements AuthRepository {
   private readonly users: InMemoryUserRecord[];
   private readonly userGenres: InMemoryUserGenreRecord[] = [];
   private readonly sessions: InMemorySessionRecord[] = [];
+  private readonly loans: InMemoryLoanRecord[];
   private readonly activeGenreCheck?: (genreIds: string[]) => Promise<boolean>;
 
   constructor(
     initialUsers?: InMemoryUserRecord[],
     activeGenreCheck?: (genreIds: string[]) => Promise<boolean>,
+    initialLoans?: InMemoryLoanRecord[],
   ) {
     this.users = (initialUsers ?? createDefaultInMemoryUsers()).map((user) => ({
       ...user,
@@ -358,6 +633,9 @@ export class InMemoryAuthRepository implements AuthRepository {
     if (activeGenreCheck !== undefined) {
       this.activeGenreCheck = activeGenreCheck;
     }
+    this.loans = (initialLoans ?? DEFAULT_IN_MEMORY_AUTH_LOANS).map((loan) => ({
+      ...loan,
+    }));
   }
 
   async existsByEmail(email: string): Promise<boolean> {
@@ -478,6 +756,180 @@ export class InMemoryAuthRepository implements AuthRepository {
 
     this.sessions.splice(index, 1);
     return true;
+  }
+
+  async listUsers(
+    params: AdminUsersQuery,
+  ): Promise<{ items: AdminUserListItem[]; total: number }> {
+    const qNormalized = params.q?.trim().toLowerCase();
+
+    let filtered = this.users.filter((user) => {
+      if (qNormalized && qNormalized.length > 0) {
+        const matchesName = user.fullName.toLowerCase().includes(qNormalized);
+        const matchesEmail = user.email.toLowerCase().includes(qNormalized);
+        if (!matchesName && !matchesEmail) {
+          return false;
+        }
+      }
+
+      if (params.role && user.role !== params.role) {
+        return false;
+      }
+
+      return true;
+    });
+
+    filtered = [...filtered].sort((a, b) => {
+      const timeDiff = b.createdAt.getTime() - a.createdAt.getTime();
+      if (timeDiff !== 0) {
+        return timeDiff;
+      }
+      return b.id.localeCompare(a.id);
+    });
+
+    const total = filtered.length;
+    const offset = (params.page - 1) * params.limit;
+    const paged = filtered.slice(offset, offset + params.limit);
+
+    const items: AdminUserListItem[] = paged.map((u) => ({
+      id: u.id,
+      full_name: u.fullName,
+      email: u.email,
+      phone_number: u.phoneNumber,
+      role: u.role,
+      status: u.status,
+    }));
+
+    return { items, total };
+  }
+
+  async findUserById(id: string): Promise<UserDetailRecord | null> {
+    const normalized = id.toLowerCase();
+    const user = this.users.find((u) => u.id.toLowerCase() === normalized);
+    if (!user) {
+      return null;
+    }
+
+    return {
+      id: user.id,
+      fullName: user.fullName,
+      email: user.email,
+      passwordHash: user.passwordHash,
+      address: user.address,
+      phoneNumber: user.phoneNumber,
+      role: user.role,
+      status: user.status,
+      createdAt: user.createdAt,
+    };
+  }
+
+  async createAdminUser(
+    input: CreateAdminUserInputInternal,
+  ): Promise<CreateAdminUserResult> {
+    const normalizedEmail = input.email.trim().toLowerCase();
+    if (await this.existsByEmail(normalizedEmail)) {
+      return { status: 'email_conflict' };
+    }
+
+    const userId = randomUUID();
+    const newUser: InMemoryUserRecord = {
+      id: userId,
+      fullName: input.fullName,
+      email: normalizedEmail,
+      passwordHash: input.passwordHash,
+      address: null,
+      phoneNumber: input.phoneNumber,
+      role: 'admin',
+      status: 'active',
+      createdAt: input.createdAt,
+    };
+
+    this.users.push(newUser);
+
+    return {
+      status: 'created',
+      user: {
+        id: newUser.id,
+        full_name: newUser.fullName,
+        email: newUser.email,
+        phone_number: newUser.phoneNumber,
+        role: newUser.role,
+        status: newUser.status,
+      },
+    };
+  }
+
+  async updateUser(
+    id: string,
+    data: UpdateUserData,
+  ): Promise<UserDetailRecord | null> {
+    const normalized = id.toLowerCase();
+    const user = this.users.find((u) => u.id.toLowerCase() === normalized);
+    if (!user) {
+      return null;
+    }
+
+    user.fullName = data.fullName;
+    user.phoneNumber = data.phoneNumber;
+    if (data.address !== undefined) {
+      user.address = data.address;
+    }
+
+    return {
+      id: user.id,
+      fullName: user.fullName,
+      email: user.email,
+      passwordHash: user.passwordHash,
+      address: user.address,
+      phoneNumber: user.phoneNumber,
+      role: user.role,
+      status: user.status,
+      createdAt: user.createdAt,
+    };
+  }
+
+  async hasActiveLoans(userId: string): Promise<boolean> {
+    const normalized = userId.toLowerCase();
+    return this.loans.some(
+      (l) => l.userId.toLowerCase() === normalized && l.status !== 'RETURNED',
+    );
+  }
+
+  async updateUserStatus(
+    id: string,
+    status: UserStatus,
+  ): Promise<UserDetailRecord | null> {
+    const normalized = id.toLowerCase();
+    const user = this.users.find((u) => u.id.toLowerCase() === normalized);
+    if (!user) {
+      return null;
+    }
+
+    user.status = status;
+
+    return {
+      id: user.id,
+      fullName: user.fullName,
+      email: user.email,
+      passwordHash: user.passwordHash,
+      address: user.address,
+      phoneNumber: user.phoneNumber,
+      role: user.role,
+      status: user.status,
+      createdAt: user.createdAt,
+    };
+  }
+
+  getLoans(): readonly InMemoryLoanRecord[] {
+    return this.loans;
+  }
+
+  addLoan(loan: InMemoryLoanRecord): void {
+    this.loans.push(loan);
+  }
+
+  clearLoans(): void {
+    this.loans.length = 0;
   }
 
   getUsers(): readonly InMemoryUserRecord[] {

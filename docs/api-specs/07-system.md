@@ -58,11 +58,11 @@ Base: `/api/v1`
 | Add genre | POST /admin/genres | admin | OK |
 | Edit/status genre | PATCH /admin/genres/:id | admin | OK |
 | Delete genre | DELETE /admin/genres/:id | admin | OK |
-| Admin user list/search/filter | GET /admin/users | admin | TODO |
-| Admin user detail | GET /admin/users/:id | admin | TODO |
-| Add Admin user | POST /admin/users | admin | TODO |
-| Edit user data | PATCH /admin/users/:id | admin | TODO |
-| Change user status | PATCH /admin/users/:id/status | admin | TODO |
+| Admin user list/search/filter | GET /admin/users | admin | OK |
+| Admin user detail | GET /admin/users/:id | admin | OK |
+| Add Admin user | POST /admin/users | admin | OK |
+| Edit user data | PATCH /admin/users/:id | admin | OK |
+| Change user status | PATCH /admin/users/:id/status | admin | OK |
 | Catalog Home | GET /books | login | TODO |
 | Book detail | GET /books/:id | login | TODO |
 | Admin books list | GET /admin/books | admin | OK |
