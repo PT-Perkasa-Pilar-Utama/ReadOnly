@@ -1,4 +1,4 @@
-import { createUniqueId, type JSX, onMount } from 'solid-js';
+import { createUniqueId, type JSX, onCleanup, onMount, Show } from 'solid-js';
 import Icon from './Icon';
 
 export default function Modal(props: {
@@ -6,10 +6,19 @@ export default function Modal(props: {
   onClose: () => void;
   children: JSX.Element;
   class?: string;
+  warning?: boolean;
 }) {
   let dialog!: HTMLDialogElement;
   const titleId = createUniqueId();
-  onMount(() => dialog.showModal());
+  onMount(() => {
+    const previousFocus = document.activeElement;
+    dialog.showModal();
+    onCleanup(() => {
+      dialog.close();
+      if (previousFocus instanceof HTMLElement && previousFocus.isConnected)
+        previousFocus.focus({ preventScroll: true });
+    });
+  });
   return (
     <dialog
       ref={dialog}
@@ -39,6 +48,12 @@ export default function Modal(props: {
       }}
     >
       <div class="modal-header">
+        <Show when={props.warning}>
+          {/* AC-12.06: ikon memperjelas peringatan sebelum akun dinonaktifkan. */}
+          <span class="modal-warning" aria-hidden="true">
+            <Icon name="warning" size={25} />
+          </span>
+        </Show>
         <h2 id={titleId}>{props.title}</h2>
         <button
           type="button"

@@ -895,23 +895,6 @@ tbody tr:hover {
 .status-action:hover:not(:disabled) {
   background: #f4e8ea;
 }
-.user-form-card {
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 32px;
-  display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(320px, 2fr);
-  gap: 50px;
-}
-.user-form-card form {
-  max-width: 700px;
-}
-.user-form-summary {
-  padding: 25px 20px;
-  border-right: 1px solid var(--line);
-  text-align: center;
-}
 .summary-icon {
   width: 68px;
   height: 68px;
@@ -921,14 +904,6 @@ tbody tr:hover {
   color: var(--wine);
   border-radius: 50%;
   margin-bottom: 20px;
-}
-.user-form-summary h2 {
-  font-size: 25px;
-  overflow-wrap: anywhere;
-}
-.user-form-summary p {
-  font-size: 12px;
-  color: var(--muted);
 }
 .form-actions {
   display: flex;
@@ -961,6 +936,24 @@ tbody tr:hover {
 .modal-header h2 {
   font-size: 24px;
   margin: 0;
+  flex: 1;
+}
+.modal-warning {
+  display: inline-flex;
+  color: #a77f35;
+}
+.user-form-modal {
+  width: min(560px, calc(100vw - 32px));
+  padding: 24px;
+}
+.user-form-modal::backdrop {
+  backdrop-filter: blur(3px);
+}
+.user-form-modal .field {
+  margin-bottom: 14px;
+}
+.user-form-modal .form-actions {
+  margin-top: 12px;
 }
 .confirmation-copy {
   font-size: 13px;
@@ -1316,17 +1309,6 @@ body:has(.toast) .reminder-popup {
     gap: 23px;
     padding: 23px;
   }
-  .user-form-card {
-    grid-template-columns: 1fr;
-    gap: 10px;
-    padding: 25px;
-  }
-  .user-form-summary {
-    display: none;
-  }
-  .user-form-card form {
-    max-width: none;
-  }
   .catalog-filters {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1556,9 +1538,6 @@ body:has(.toast) .reminder-popup {
   }
   .role-filter select {
     flex: 1;
-  }
-  .user-form-card {
-    padding: 20px;
   }
   .row-actions {
     gap: 4px;
