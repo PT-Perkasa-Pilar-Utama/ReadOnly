@@ -15,7 +15,6 @@ export default function HomePage() {
   const [genre, setGenre] = createSignal('');
   const [filters, setFilters] = createSignal({ author: '', genre: '' });
   const [page, setPage] = createSignal(1);
-  const [filterOpen, setFilterOpen] = createSignal(false);
   const catalog = createQuery(() => ({
     queryKey: ['books', keyword(), filters(), page()],
     queryFn: ({ signal }) =>
@@ -77,12 +76,9 @@ export default function HomePage() {
           </Show>
         </header>
         {/* AC-07.02, AC-07.03: keyword otomatis, filter diterapkan lewat Set Filter. */}
-        <div class="catalog-toolbar">
-          <div class="search-field">
-            <label for="book-search" class="sr-only">
-              Cari buku
-            </label>
-            <Icon name="search" size={19} />
+        <form id="catalog-filter" class="catalog-filters" onSubmit={apply}>
+          <div class="field catalog-search">
+            <label for="book-search">Cari buku</label>
             <input
               id="book-search"
               type="search"
@@ -94,65 +90,42 @@ export default function HomePage() {
               placeholder="Cari judul, penulis, atau genre"
             />
           </div>
-          <button
-            type="button"
-            class="button secondary"
-            aria-expanded={filterOpen()}
-            aria-controls="catalog-filter"
-            onClick={() => setFilterOpen(!filterOpen())}
-          >
-            <Icon name="filter" size={18} />
-            Filter
-            <Show when={filters().author || filters().genre}>
-              <span class="filter-count">
-                {Number(Boolean(filters().author)) +
-                  Number(Boolean(filters().genre))}
-              </span>
-            </Show>
+          <div class="field">
+            <label for="author">Penulis</label>
+            <select
+              id="author"
+              value={author()}
+              onChange={(event) => setAuthor(event.currentTarget.value)}
+            >
+              <option value="">Semua Penulis</option>
+              <For each={catalog.data?.authors}>
+                {(name) => <option value={name}>{name}</option>}
+              </For>
+            </select>
+          </div>
+          <div class="field">
+            <label for="genre">Genre</label>
+            <select
+              id="genre"
+              value={genre()}
+              onChange={(event) => setGenre(event.currentTarget.value)}
+              disabled={!genres.isSuccess}
+            >
+              <option value="">Semua Genre</option>
+              <For each={genres.data}>
+                {(item) => <option value={item.id}>{item.name}</option>}
+              </For>
+            </select>
+          </div>
+          <button class="button" type="submit">
+            Set Filter
           </button>
-        </div>
-        <Show when={filterOpen()}>
-          <form id="catalog-filter" class="filter-panel" onSubmit={apply}>
-            <div class="field">
-              <label for="author">Penulis</label>
-              <select
-                id="author"
-                value={author()}
-                onChange={(event) => setAuthor(event.currentTarget.value)}
-              >
-                <option value="">Semua Penulis</option>
-                <For each={catalog.data?.authors}>
-                  {(name) => <option value={name}>{name}</option>}
-                </For>
-              </select>
-            </div>
-            <div class="field">
-              <label for="genre">Genre</label>
-              <select
-                id="genre"
-                value={genre()}
-                onChange={(event) => setGenre(event.currentTarget.value)}
-                disabled={!genres.isSuccess}
-              >
-                <option value="">Semua Genre</option>
-                <For each={genres.data}>
-                  {(item) => <option value={item.id}>{item.name}</option>}
-                </For>
-              </select>
-            </div>
-            <button class="button" type="submit">
-              Set Filter
-            </button>
-            <button class="text-button" type="button" onClick={reset}>
-              Reset
-            </button>
-            <Show when={genres.isError}>
-              <ErrorNotice
-                error={genres.error}
-                retry={() => void genres.refetch()}
-              />
-            </Show>
-          </form>
+        </form>
+        <Show when={genres.isError}>
+          <ErrorNotice
+            error={genres.error}
+            retry={() => void genres.refetch()}
+          />
         </Show>
         <Show when={catalog.isPending}>
           <Loading label="Memuat koleksi buku…" />
