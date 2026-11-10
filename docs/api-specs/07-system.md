@@ -54,10 +54,10 @@ Base: `/api/v1`
 | Logout | POST /auth/logout | login | OK |
 | Me | GET /auth/me | login | OK |
 | Genres aktif | GET /genres | publik | OK |
-| Admin genre list/search | GET /admin/genres | admin | TODO |
-| Add genre | POST /admin/genres | admin | TODO |
-| Edit/status genre | PATCH /admin/genres/:id | admin | TODO |
-| Delete genre | DELETE /admin/genres/:id | admin | TODO |
+| Admin genre list/search | GET /admin/genres | admin | OK |
+| Add genre | POST /admin/genres | admin | OK |
+| Edit/status genre | PATCH /admin/genres/:id | admin | OK |
+| Delete genre | DELETE /admin/genres/:id | admin | OK |
 | Admin user list/search/filter | GET /admin/users | admin | TODO |
 | Admin user detail | GET /admin/users/:id | admin | TODO |
 | Add Admin user | POST /admin/users | admin | TODO |

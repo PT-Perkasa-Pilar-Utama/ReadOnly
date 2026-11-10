@@ -6,8 +6,15 @@ import {
   loans,
   QA_IDS,
   ratings,
+  userGenres,
 } from '@readonly/db';
-import type { GenreItem, GenreStatus } from '@readonly/shared';
+import {
+  type AdminGenreItem,
+  API_MESSAGES,
+  type GenreItem,
+  type GenreStatus,
+  type PaginatedResponse,
+} from '@readonly/shared';
 import {
   and,
   asc,
@@ -20,11 +27,29 @@ import {
   or,
   sql,
 } from 'drizzle-orm';
+import {
+  createConflictError,
+  createGenreInUseError,
+  createNotFoundError,
+} from '../../shared/errors';
 
 export interface GenreSeedRecord {
   id: string;
   name: string;
   status: GenreStatus;
+}
+
+export interface GenreRecord {
+  id: string;
+  name: string;
+  status: GenreStatus;
+  createdAt: Date;
+}
+
+export interface ListAdminGenresOptions {
+  q?: string | undefined;
+  page: number;
+  limit: number;
 }
 
 export interface AdminBooksQueryParams {
@@ -91,6 +116,50 @@ export interface BooksRepository {
     id: string,
     now: Date,
   ): Promise<'deleted' | 'not_found' | 'has_active_loans'>;
+  listAdminGenres(
+    options: ListAdminGenresOptions,
+  ): Promise<PaginatedResponse<AdminGenreItem>>;
+  findGenreByName(
+    name: string,
+    excludeId?: string | undefined,
+  ): Promise<GenreRecord | null>;
+  getGenreById(id: string): Promise<GenreRecord | null>;
+  createGenre(data: {
+    name: string;
+    status?: GenreStatus | undefined;
+  }): Promise<GenreRecord>;
+  updateGenre(
+    id: string,
+    data: { name?: string | undefined; status?: GenreStatus | undefined },
+  ): Promise<GenreRecord>;
+  isGenreInUse(id: string): Promise<boolean>;
+  deleteGenre(id: string): Promise<void>;
+}
+
+function isPostgresUniqueViolation(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+
+  const record = error as {
+    code?: unknown;
+    cause?: { code?: unknown };
+  };
+
+  return record.code === '23505' || record.cause?.code === '23505';
+}
+
+function isPostgresForeignKeyViolation(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+
+  const record = error as {
+    code?: unknown;
+    cause?: { code?: unknown };
+  };
+
+  return record.code === '23503' || record.cause?.code === '23503';
 }
 
 export class DrizzleBooksRepository implements BooksRepository {
@@ -208,7 +277,7 @@ export class DrizzleBooksRepository implements BooksRepository {
 
     const bookIds = bookRows.map((b) => b.id);
 
-    const genreRows = await this.db
+    const bookGenreRows = await this.db
       .select({
         bookId: bookGenres.bookId,
         genreId: genres.id,
@@ -220,32 +289,32 @@ export class DrizzleBooksRepository implements BooksRepository {
       .where(inArray(bookGenres.bookId, bookIds))
       .orderBy(asc(genres.name));
 
-    const genreMap = new Map<
+    const genresByBookId = new Map<
       string,
       Array<{ id: string; name: string; status: GenreStatus }>
     >();
-    for (const row of genreRows) {
-      const list = genreMap.get(row.bookId) ?? [];
+    for (const bg of bookGenreRows) {
+      const list = genresByBookId.get(bg.bookId) ?? [];
       list.push({
-        id: row.genreId,
-        name: row.genreName,
-        status: row.genreStatus,
+        id: bg.genreId,
+        name: bg.genreName,
+        status: bg.genreStatus,
       });
-      genreMap.set(row.bookId, list);
+      genresByBookId.set(bg.bookId, list);
     }
 
     const ratingRows = await this.db
       .select({
         bookId: ratings.bookId,
-        avgRating: sql<number>`round(avg(${ratings.score})::numeric, 1)::float`,
+        average: sql<number>`round(avg(${ratings.score})::numeric, 1)::float`,
       })
       .from(ratings)
       .where(inArray(ratings.bookId, bookIds))
       .groupBy(ratings.bookId);
 
-    const ratingMap = new Map<string, number>();
+    const ratingByBookId = new Map<string, number>();
     for (const r of ratingRows) {
-      ratingMap.set(r.bookId, Number(r.avgRating));
+      ratingByBookId.set(r.bookId, Number(r.average));
     }
 
     const data: BookRecordWithDetails[] = bookRows.map((b) => ({
@@ -259,24 +328,24 @@ export class DrizzleBooksRepository implements BooksRepository {
       coverPath: b.coverPath,
       deletedAt: b.deletedAt,
       createdAt: b.createdAt,
-      genres: genreMap.get(b.id) ?? [],
-      averageRating: ratingMap.get(b.id) ?? null,
+      genres: genresByBookId.get(b.id) ?? [],
+      averageRating: ratingByBookId.get(b.id) ?? null,
     }));
 
     return { data, authors, total };
   }
 
   async findBookById(id: string): Promise<BookRecordWithDetails | null> {
-    const [bookRow] = await this.db
+    const [book] = await this.db
       .select()
       .from(books)
       .where(and(eq(books.id, id), isNull(books.deletedAt)));
 
-    if (!bookRow) {
+    if (!book) {
       return null;
     }
 
-    const genreRows = await this.db
+    const bookGenreRows = await this.db
       .select({
         id: genres.id,
         name: genres.name,
@@ -295,24 +364,27 @@ export class DrizzleBooksRepository implements BooksRepository {
       .where(eq(ratings.bookId, id));
 
     return {
-      id: bookRow.id,
-      title: bookRow.title,
-      author: bookRow.author,
-      publisher: bookRow.publisher,
-      publicationYear: bookRow.publicationYear,
-      synopsis: bookRow.synopsis,
-      availableCount: bookRow.availableCount,
-      coverPath: bookRow.coverPath,
-      deletedAt: bookRow.deletedAt,
-      createdAt: bookRow.createdAt,
-      genres: genreRows,
-      averageRating: ratingRow ? Number(ratingRow.avgRating) : null,
+      id: book.id,
+      title: book.title,
+      author: book.author,
+      publisher: book.publisher,
+      publicationYear: book.publicationYear,
+      synopsis: book.synopsis,
+      availableCount: book.availableCount,
+      coverPath: book.coverPath,
+      deletedAt: book.deletedAt,
+      createdAt: book.createdAt,
+      genres: bookGenreRows,
+      averageRating:
+        ratingRow?.avgRating !== undefined && ratingRow.avgRating !== null
+          ? Number(ratingRow.avgRating)
+          : null,
     };
   }
 
   async createBook(params: CreateBookParams): Promise<{ id: string }> {
     return this.db.transaction(async (tx) => {
-      const [newBook] = await tx
+      const [inserted] = await tx
         .insert(books)
         .values({
           title: params.title,
@@ -326,16 +398,20 @@ export class DrizzleBooksRepository implements BooksRepository {
         })
         .returning({ id: books.id });
 
+      if (!inserted) {
+        throw new Error('Gagal menyimpan data buku.');
+      }
+
       if (params.genreIds.length > 0) {
         await tx.insert(bookGenres).values(
           params.genreIds.map((genreId) => ({
-            bookId: newBook.id,
+            bookId: inserted.id,
             genreId,
           })),
         );
       }
 
-      return { id: newBook.id };
+      return { id: inserted.id };
     });
   }
 
@@ -350,7 +426,7 @@ export class DrizzleBooksRepository implements BooksRepository {
         return false;
       }
 
-      const updateValues: Record<string, unknown> = {
+      const updateValues: Partial<typeof books.$inferInsert> = {
         title: params.title,
         author: params.author,
         publisher: params.publisher,
@@ -385,23 +461,22 @@ export class DrizzleBooksRepository implements BooksRepository {
     now: Date,
   ): Promise<'deleted' | 'not_found' | 'has_active_loans'> {
     return this.db.transaction(async (tx) => {
-      const [bookRow] = await tx
+      const [book] = await tx
         .select({ id: books.id })
         .from(books)
         .where(and(eq(books.id, id), isNull(books.deletedAt)));
 
-      if (!bookRow) {
+      if (!book) {
         return 'not_found';
       }
 
-      // AC-05.09 & Q-11: reject deletion if loans with status <> 'RETURNED' exist
-      const [activeLoan] = await tx
+      const activeLoans = await tx
         .select({ id: loans.id })
         .from(loans)
         .where(and(eq(loans.bookId, id), ne(loans.status, 'RETURNED')))
         .limit(1);
 
-      if (activeLoan) {
+      if (activeLoans.length > 0) {
         return 'has_active_loans';
       }
 
@@ -409,6 +484,256 @@ export class DrizzleBooksRepository implements BooksRepository {
 
       return 'deleted';
     });
+  }
+
+  async listAdminGenres(
+    options: ListAdminGenresOptions,
+  ): Promise<PaginatedResponse<AdminGenreItem>> {
+    const page = Math.max(1, options.page);
+    const limit = Math.min(50, Math.max(1, options.limit));
+    const offset = (page - 1) * limit;
+
+    const trimmedQ = options.q?.trim();
+    const searchFilter =
+      trimmedQ && trimmedQ.length > 0
+        ? sql`lower(${genres.name}) LIKE ${`%${trimmedQ.toLowerCase()}%`}`
+        : undefined;
+
+    const countQuery = this.db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(genres);
+    if (searchFilter) {
+      countQuery.where(searchFilter);
+    }
+    const countResult = await countQuery;
+    const total = countResult[0]?.total ?? 0;
+    const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
+
+    if (total === 0) {
+      return {
+        data: [],
+        pagination: {
+          page,
+          limit,
+          total: 0,
+          totalPages: 0,
+        },
+      };
+    }
+
+    const bookCountSql = sql<number>`COALESCE((
+      SELECT count(DISTINCT bg.book_id)::int
+      FROM book_genres bg
+      INNER JOIN books b ON b.id = bg.book_id
+      WHERE bg.genre_id = ${genres.id}
+        AND b.deleted_at IS NULL
+    ), 0)`;
+
+    const itemsQuery = this.db
+      .select({
+        id: genres.id,
+        name: genres.name,
+        status: genres.status,
+        bookCount: bookCountSql,
+      })
+      .from(genres)
+      .orderBy(asc(genres.name))
+      .limit(limit)
+      .offset(offset);
+
+    if (searchFilter) {
+      itemsQuery.where(searchFilter);
+    }
+
+    const rows = await itemsQuery;
+
+    const data: AdminGenreItem[] = rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      status: r.status,
+      book_count: Number(r.bookCount ?? 0),
+    }));
+
+    return {
+      data,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+      },
+    };
+  }
+
+  async findGenreByName(
+    name: string,
+    excludeId?: string | undefined,
+  ): Promise<GenreRecord | null> {
+    const trimmed = name.trim().toLowerCase();
+    const conditions = [sql`lower(btrim(${genres.name})) = ${trimmed}`];
+    if (excludeId) {
+      conditions.push(sql`${genres.id} != ${excludeId}`);
+    }
+
+    const rows = await this.db
+      .select({
+        id: genres.id,
+        name: genres.name,
+        status: genres.status,
+        createdAt: genres.createdAt,
+      })
+      .from(genres)
+      .where(and(...conditions))
+      .limit(1);
+
+    return rows[0] ?? null;
+  }
+
+  async getGenreById(id: string): Promise<GenreRecord | null> {
+    const rows = await this.db
+      .select({
+        id: genres.id,
+        name: genres.name,
+        status: genres.status,
+        createdAt: genres.createdAt,
+      })
+      .from(genres)
+      .where(eq(genres.id, id))
+      .limit(1);
+
+    return rows[0] ?? null;
+  }
+
+  async createGenre(data: {
+    name: string;
+    status?: GenreStatus | undefined;
+  }): Promise<GenreRecord> {
+    const trimmedName = data.name.trim();
+    try {
+      const rows = await this.db
+        .insert(genres)
+        .values({
+          name: trimmedName,
+          status: data.status ?? 'active',
+        })
+        .returning({
+          id: genres.id,
+          name: genres.name,
+          status: genres.status,
+          createdAt: genres.createdAt,
+        });
+
+      const created = rows[0];
+      if (!created) {
+        throw new Error('Failed to insert genre');
+      }
+      return created;
+    } catch (err: unknown) {
+      if (isPostgresUniqueViolation(err)) {
+        throw createConflictError(API_MESSAGES.GENRE_ALREADY_EXISTS, 'name');
+      }
+      throw err;
+    }
+  }
+
+  async updateGenre(
+    id: string,
+    data: { name?: string | undefined; status?: GenreStatus | undefined },
+  ): Promise<GenreRecord> {
+    const updateValues: Partial<{ name: string; status: GenreStatus }> = {};
+    if (data.name !== undefined) {
+      updateValues.name = data.name.trim();
+    }
+    if (data.status !== undefined) {
+      updateValues.status = data.status;
+    }
+
+    try {
+      const rows = await this.db
+        .update(genres)
+        .set(updateValues)
+        .where(eq(genres.id, id))
+        .returning({
+          id: genres.id,
+          name: genres.name,
+          status: genres.status,
+          createdAt: genres.createdAt,
+        });
+
+      const updated = rows[0];
+      if (!updated) {
+        throw createNotFoundError('Genre tidak ditemukan.');
+      }
+      return updated;
+    } catch (err: unknown) {
+      if (isPostgresUniqueViolation(err)) {
+        throw createConflictError(API_MESSAGES.GENRE_ALREADY_EXISTS, 'name');
+      }
+      throw err;
+    }
+  }
+
+  async isGenreInUse(id: string): Promise<boolean> {
+    const bookRelation = await this.db
+      .select({ bookId: bookGenres.bookId })
+      .from(bookGenres)
+      .where(eq(bookGenres.genreId, id))
+      .limit(1);
+
+    if (bookRelation.length > 0) {
+      return true;
+    }
+
+    const userRelation = await this.db
+      .select({ userId: userGenres.userId })
+      .from(userGenres)
+      .where(eq(userGenres.genreId, id))
+      .limit(1);
+
+    return userRelation.length > 0;
+  }
+
+  async deleteGenre(id: string): Promise<void> {
+    try {
+      await this.db.transaction(async (tx) => {
+        const genreRows = await tx
+          .select({ id: genres.id })
+          .from(genres)
+          .where(eq(genres.id, id))
+          .limit(1);
+
+        if (genreRows.length === 0) {
+          throw createNotFoundError('Genre tidak ditemukan.');
+        }
+
+        const bookRel = await tx
+          .select({ bookId: bookGenres.bookId })
+          .from(bookGenres)
+          .where(eq(bookGenres.genreId, id))
+          .limit(1);
+
+        if (bookRel.length > 0) {
+          throw createGenreInUseError();
+        }
+
+        const userRel = await tx
+          .select({ userId: userGenres.userId })
+          .from(userGenres)
+          .where(eq(userGenres.genreId, id))
+          .limit(1);
+
+        if (userRel.length > 0) {
+          throw createGenreInUseError();
+        }
+
+        await tx.delete(genres).where(eq(genres.id, id));
+      });
+    } catch (err: unknown) {
+      if (isPostgresForeignKeyViolation(err)) {
+        throw createGenreInUseError();
+      }
+      throw err;
+    }
   }
 }
 
@@ -418,6 +743,11 @@ const DEFAULT_IN_MEMORY_GENRES: GenreSeedRecord[] = [
   { id: QA_IDS.genres.sejarah, name: 'Sejarah', status: 'active' },
   { id: QA_IDS.genres.teknologi, name: 'Teknologi', status: 'active' },
   { id: QA_IDS.genres.sains, name: 'Sains', status: 'inactive' },
+  {
+    id: QA_IDS.genres.unused,
+    name: 'Puisi Klasik',
+    status: 'active',
+  },
   {
     id: QA_IDS.genres.inactive,
     name: 'Ensiklopedia Lama',
@@ -436,17 +766,6 @@ interface InMemoryBookRecord {
   coverPath: string | null;
   deletedAt: Date | null;
   createdAt: Date;
-}
-
-interface InMemoryLoanRecord {
-  id: string;
-  bookId: string;
-  status: string;
-}
-
-interface InMemoryRatingRecord {
-  bookId: string;
-  score: number;
 }
 
 const DEFAULT_IN_MEMORY_BOOKS: InMemoryBookRecord[] = [
@@ -527,6 +846,12 @@ const DEFAULT_IN_MEMORY_BOOK_GENRES: Array<{
   { bookId: QA_IDS.books.bookE, genreId: QA_IDS.genres.fiksi },
 ];
 
+interface InMemoryLoanRecord {
+  id: string;
+  bookId: string;
+  status: string;
+}
+
 const DEFAULT_IN_MEMORY_LOANS: InMemoryLoanRecord[] = [
   {
     id: QA_IDS.loans.pending,
@@ -540,14 +865,30 @@ const DEFAULT_IN_MEMORY_LOANS: InMemoryLoanRecord[] = [
   },
 ];
 
+interface InMemoryRatingRecord {
+  bookId: string;
+  score: number;
+}
+
 const DEFAULT_IN_MEMORY_RATINGS: InMemoryRatingRecord[] = [
   { bookId: QA_IDS.books.bookA, score: 5 },
   { bookId: QA_IDS.books.bookA, score: 4 },
   { bookId: QA_IDS.books.bookB, score: 4 },
 ];
 
+export interface InMemUserGenre {
+  userId: string;
+  genreId: string;
+}
+
+const DEFAULT_IN_MEMORY_USER_GENRES: InMemUserGenre[] = [
+  { userId: QA_IDS.users.member1, genreId: QA_IDS.genres.fiksi },
+  { userId: QA_IDS.users.member1, genreId: QA_IDS.genres.teknologi },
+  { userId: QA_IDS.users.member2, genreId: QA_IDS.genres.sejarah },
+];
+
 export class InMemoryBooksRepository implements BooksRepository {
-  private readonly genreRecords: GenreSeedRecord[];
+  private readonly genreRecords: GenreRecord[];
   private readonly bookRecords: InMemoryBookRecord[];
   private readonly bookGenreRecords: Array<{
     bookId: string;
@@ -555,9 +896,12 @@ export class InMemoryBooksRepository implements BooksRepository {
   }>;
   private readonly loanRecords: InMemoryLoanRecord[];
   private readonly ratingRecords: InMemoryRatingRecord[];
+  private readonly userGenreRecords: InMemUserGenre[];
 
   constructor(
-    initialGenres: GenreSeedRecord[] = DEFAULT_IN_MEMORY_GENRES,
+    initialGenres: Array<
+      GenreSeedRecord | GenreRecord
+    > = DEFAULT_IN_MEMORY_GENRES,
     initialBooks: InMemoryBookRecord[] = DEFAULT_IN_MEMORY_BOOKS,
     initialBookGenres: Array<{
       bookId: string;
@@ -565,12 +909,19 @@ export class InMemoryBooksRepository implements BooksRepository {
     }> = DEFAULT_IN_MEMORY_BOOK_GENRES,
     initialLoans: InMemoryLoanRecord[] = DEFAULT_IN_MEMORY_LOANS,
     initialRatings: InMemoryRatingRecord[] = DEFAULT_IN_MEMORY_RATINGS,
+    initialUserGenres: InMemUserGenre[] = DEFAULT_IN_MEMORY_USER_GENRES,
   ) {
-    this.genreRecords = initialGenres.map((item) => ({ ...item }));
+    this.genreRecords = initialGenres.map((item) => ({
+      id: item.id,
+      name: item.name,
+      status: item.status,
+      createdAt: 'createdAt' in item ? item.createdAt : new Date(),
+    }));
     this.bookRecords = initialBooks.map((item) => ({ ...item }));
     this.bookGenreRecords = initialBookGenres.map((item) => ({ ...item }));
     this.loanRecords = initialLoans.map((item) => ({ ...item }));
     this.ratingRecords = initialRatings.map((item) => ({ ...item }));
+    this.userGenreRecords = initialUserGenres.map((item) => ({ ...item }));
   }
 
   async listActiveGenres(): Promise<GenreItem[]> {
@@ -604,11 +955,7 @@ export class InMemoryBooksRepository implements BooksRepository {
     const lookup = new Set(ids.map((id) => id.toLowerCase()));
     return this.genreRecords
       .filter((genre) => lookup.has(genre.id.toLowerCase()))
-      .map((genre) => ({
-        id: genre.id,
-        name: genre.name,
-        status: genre.status,
-      }));
+      .map(({ id, name, status }) => ({ id, name, status }));
   }
 
   async listAdminBooks(params: AdminBooksQueryParams): Promise<{
@@ -616,59 +963,53 @@ export class InMemoryBooksRepository implements BooksRepository {
     authors: string[];
     total: number;
   }> {
-    const activeBooks = this.bookRecords.filter(
-      (b) => b.deletedAt === null || b.deletedAt === undefined,
+    const nonDeletedBooks = this.bookRecords.filter(
+      (b) => b.deletedAt === null,
     );
 
-    const authors = Array.from(new Set(activeBooks.map((b) => b.author))).sort(
-      (a, b) => a.localeCompare(b),
-    );
+    const authors = Array.from(
+      new Set(nonDeletedBooks.map((b) => b.author)),
+    ).sort((a, b) => a.localeCompare(b));
 
     const genreLookup = new Map<string, GenreSeedRecord>();
     for (const g of this.genreRecords) {
       genreLookup.set(g.id.toLowerCase(), g);
     }
 
-    const filtered = activeBooks.filter((book) => {
-      if (params.author && params.author.trim().length > 0) {
-        if (book.author.toLowerCase() !== params.author.trim().toLowerCase()) {
-          return false;
-        }
-      }
+    let filtered = nonDeletedBooks;
 
-      if (params.genre && params.genre.trim().length > 0) {
-        const targetGenreId = params.genre.trim().toLowerCase();
-        const hasGenre = this.bookGenreRecords.some(
+    if (params.author && params.author.trim().length > 0) {
+      const authorFilter = params.author.trim().toLowerCase();
+      filtered = filtered.filter(
+        (b) => b.author.toLowerCase() === authorFilter,
+      );
+    }
+
+    if (params.genre && params.genre.trim().length > 0) {
+      const targetGenreId = params.genre.trim().toLowerCase();
+      filtered = filtered.filter((b) =>
+        this.bookGenreRecords.some(
           (bg) =>
-            bg.bookId === book.id && bg.genreId.toLowerCase() === targetGenreId,
-        );
-        if (!hasGenre) {
-          return false;
-        }
-      }
+            bg.bookId === b.id && bg.genreId.toLowerCase() === targetGenreId,
+        ),
+      );
+    }
 
-      if (params.q && params.q.trim().length > 0) {
-        const query = params.q.trim().toLowerCase();
-        const titleMatch = book.title.toLowerCase().includes(query);
-        const authorMatch = book.author.toLowerCase().includes(query);
-
-        const bookGids = this.bookGenreRecords
-          .filter((bg) => bg.bookId === book.id)
-          .map((bg) => bg.genreId.toLowerCase());
-        const genreMatch = bookGids.some((gid) => {
-          const g = genreLookup.get(gid);
-          return g ? g.name.toLowerCase().includes(query) : false;
+    if (params.q && params.q.trim().length > 0) {
+      const qLower = params.q.trim().toLowerCase();
+      filtered = filtered.filter((b) => {
+        const titleMatch = b.title.toLowerCase().includes(qLower);
+        const authorMatch = b.author.toLowerCase().includes(qLower);
+        const genreMatch = this.bookGenreRecords.some((bg) => {
+          if (bg.bookId !== b.id) return false;
+          const g = genreLookup.get(bg.genreId.toLowerCase());
+          return g ? g.name.toLowerCase().includes(qLower) : false;
         });
 
-        if (!titleMatch && !authorMatch && !genreMatch) {
-          return false;
-        }
-      }
+        return titleMatch || authorMatch || genreMatch;
+      });
+    }
 
-      return true;
-    });
-
-    // Sort createdAt DESC, id DESC
     filtered.sort((a, b) => {
       const diff = b.createdAt.getTime() - a.createdAt.getTime();
       return diff !== 0 ? diff : b.id.localeCompare(a.id);
@@ -800,14 +1141,12 @@ export class InMemoryBooksRepository implements BooksRepository {
       book.coverPath = params.coverPath;
     }
 
-    // Remove existing book_genres
     for (let i = this.bookGenreRecords.length - 1; i >= 0; i--) {
       if (this.bookGenreRecords[i].bookId.toLowerCase() === id.toLowerCase()) {
         this.bookGenreRecords.splice(i, 1);
       }
     }
 
-    // Add updated genreIds
     for (const gid of params.genreIds) {
       this.bookGenreRecords.push({ bookId: book.id, genreId: gid });
     }
@@ -826,7 +1165,6 @@ export class InMemoryBooksRepository implements BooksRepository {
       return 'not_found';
     }
 
-    // Check active loans
     const hasActive = this.loanRecords.some(
       (l) =>
         l.bookId.toLowerCase() === id.toLowerCase() && l.status !== 'RETURNED',
@@ -837,5 +1175,157 @@ export class InMemoryBooksRepository implements BooksRepository {
 
     book.deletedAt = now;
     return 'deleted';
+  }
+
+  async listAdminGenres(
+    options: ListAdminGenresOptions,
+  ): Promise<PaginatedResponse<AdminGenreItem>> {
+    const page = Math.max(1, options.page);
+    const limit = Math.min(50, Math.max(1, options.limit));
+    const trimmedQ = options.q?.trim().toLowerCase();
+
+    let filtered = [...this.genreRecords];
+    if (trimmedQ && trimmedQ.length > 0) {
+      filtered = filtered.filter((genre) =>
+        genre.name.toLowerCase().includes(trimmedQ),
+      );
+    }
+
+    filtered.sort((a, b) => a.name.localeCompare(b.name));
+
+    const total = filtered.length;
+    const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
+    const offset = (page - 1) * limit;
+    const paginatedRecords = filtered.slice(offset, offset + limit);
+
+    const activeBookIdSet = new Set(
+      this.bookRecords
+        .filter((b) => !b.deletedAt)
+        .map((b) => b.id.toLowerCase()),
+    );
+
+    const data: AdminGenreItem[] = paginatedRecords.map((genre) => {
+      const distinctBooks = new Set<string>();
+      for (const rel of this.bookGenreRecords) {
+        if (rel.genreId.toLowerCase() === genre.id.toLowerCase()) {
+          if (activeBookIdSet.has(rel.bookId.toLowerCase())) {
+            distinctBooks.add(rel.bookId.toLowerCase());
+          }
+        }
+      }
+      return {
+        id: genre.id,
+        name: genre.name,
+        status: genre.status,
+        book_count: distinctBooks.size,
+      };
+    });
+
+    return {
+      data,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+      },
+    };
+  }
+
+  async findGenreByName(
+    name: string,
+    excludeId?: string | undefined,
+  ): Promise<GenreRecord | null> {
+    const trimmed = name.trim().toLowerCase();
+    const found = this.genreRecords.find((genre) => {
+      if (excludeId && genre.id.toLowerCase() === excludeId.toLowerCase()) {
+        return false;
+      }
+      return genre.name.trim().toLowerCase() === trimmed;
+    });
+    return found ? { ...found } : null;
+  }
+
+  async getGenreById(id: string): Promise<GenreRecord | null> {
+    const found = this.genreRecords.find(
+      (genre) => genre.id.toLowerCase() === id.toLowerCase(),
+    );
+    return found ? { ...found } : null;
+  }
+
+  async createGenre(data: {
+    name: string;
+    status?: GenreStatus | undefined;
+  }): Promise<GenreRecord> {
+    const trimmed = data.name.trim();
+    const duplicate = await this.findGenreByName(trimmed);
+    if (duplicate) {
+      throw createConflictError(API_MESSAGES.GENRE_ALREADY_EXISTS, 'name');
+    }
+
+    const newRecord: GenreRecord = {
+      id: crypto.randomUUID(),
+      name: trimmed,
+      status: data.status ?? 'active',
+      createdAt: new Date(),
+    };
+    this.genreRecords.push(newRecord);
+    return { ...newRecord };
+  }
+
+  async updateGenre(
+    id: string,
+    data: { name?: string | undefined; status?: GenreStatus | undefined },
+  ): Promise<GenreRecord> {
+    const index = this.genreRecords.findIndex(
+      (genre) => genre.id.toLowerCase() === id.toLowerCase(),
+    );
+    if (index === -1) {
+      throw createNotFoundError('Genre tidak ditemukan.');
+    }
+
+    if (data.name !== undefined) {
+      const trimmed = data.name.trim();
+      const duplicate = await this.findGenreByName(trimmed, id);
+      if (duplicate) {
+        throw createConflictError(API_MESSAGES.GENRE_ALREADY_EXISTS, 'name');
+      }
+      this.genreRecords[index].name = trimmed;
+    }
+
+    if (data.status !== undefined) {
+      this.genreRecords[index].status = data.status;
+    }
+
+    return { ...this.genreRecords[index] };
+  }
+
+  async isGenreInUse(id: string): Promise<boolean> {
+    const idLower = id.toLowerCase();
+    const inBooks = this.bookGenreRecords.some(
+      (rel) => rel.genreId.toLowerCase() === idLower,
+    );
+    if (inBooks) {
+      return true;
+    }
+
+    return this.userGenreRecords.some(
+      (rel) => rel.genreId.toLowerCase() === idLower,
+    );
+  }
+
+  async deleteGenre(id: string): Promise<void> {
+    const index = this.genreRecords.findIndex(
+      (genre) => genre.id.toLowerCase() === id.toLowerCase(),
+    );
+    if (index === -1) {
+      throw createNotFoundError('Genre tidak ditemukan.');
+    }
+
+    if (await this.isGenreInUse(id)) {
+      throw createGenreInUseError();
+    }
+
+    this.genreRecords.splice(index, 1);
   }
 }

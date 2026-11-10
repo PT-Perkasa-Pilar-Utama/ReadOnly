@@ -1,9 +1,17 @@
 import {
   type AdminBookItem,
   type AdminBooksResponse,
+  type AdminGenreItem,
   API_MESSAGES,
+  type ApiSuccessEnvelope,
   type BookMutationResponseData,
+  type CreateGenreInput,
+  type CreateGenreResponseData,
+  type DeleteGenreResponseData,
   type GenreItem,
+  type PaginatedResponse,
+  type UpdateGenreInput,
+  type UpdateGenreResponseData,
 } from '@readonly/shared';
 import { type ClockPort, SystemClock } from '../../ports/clock';
 import {
@@ -12,12 +20,18 @@ import {
   validateAndExtractCover,
 } from '../../ports/storage';
 import {
+  createConflictError,
   createForbiddenError,
+  createGenreInUseError,
   createNotFoundError,
   createValidationError,
 } from '../../shared/errors';
 import type { BooksRepository } from './books.repository';
-import type { AdminBooksQuery, ValidatedBookFormData } from './books.schema';
+import type {
+  AdminBooksQuery,
+  AdminGenresQuery,
+  ValidatedBookFormData,
+} from './books.schema';
 
 export interface ActiveGenreProvider {
   listActiveGenres(): Promise<GenreItem[]>;
@@ -278,6 +292,119 @@ export class BooksService implements ActiveGenreProvider {
     return {
       data: { id },
       message: API_MESSAGES.BOOK_DELETED,
+    };
+  }
+
+  async listAdminGenres(
+    query: AdminGenresQuery,
+  ): Promise<PaginatedResponse<AdminGenreItem>> {
+    return this.repository.listAdminGenres({
+      q: query.q,
+      page: query.page,
+      limit: query.limit,
+    });
+  }
+
+  async createGenre(
+    input: CreateGenreInput,
+  ): Promise<ApiSuccessEnvelope<CreateGenreResponseData>> {
+    const trimmedName = input.name.trim();
+    if (trimmedName.length === 0) {
+      throw createValidationError(API_MESSAGES.FIELD_REQUIRED, 'name');
+    }
+
+    const existing = await this.repository.findGenreByName(trimmedName);
+    if (existing) {
+      throw createConflictError(API_MESSAGES.GENRE_ALREADY_EXISTS, 'name');
+    }
+
+    const created = await this.repository.createGenre({
+      name: trimmedName,
+      status: 'active',
+    });
+
+    return {
+      data: {
+        id: created.id,
+        name: created.name,
+        status: 'active',
+      },
+      message: API_MESSAGES.GENRE_CREATED,
+    };
+  }
+
+  async updateGenre(
+    id: string,
+    input: UpdateGenreInput,
+  ): Promise<ApiSuccessEnvelope<UpdateGenreResponseData>> {
+    const existing = await this.repository.getGenreById(id);
+    if (!existing) {
+      throw createNotFoundError('Genre tidak ditemukan.');
+    }
+
+    let trimmedName: string | undefined;
+    if (input.name !== undefined) {
+      trimmedName = input.name.trim();
+      if (trimmedName.length === 0) {
+        throw createValidationError(API_MESSAGES.FIELD_REQUIRED, 'name');
+      }
+
+      const duplicate = await this.repository.findGenreByName(trimmedName, id);
+      if (duplicate) {
+        throw createConflictError(API_MESSAGES.GENRE_ALREADY_EXISTS, 'name');
+      }
+    }
+
+    const updateData: {
+      name?: string | undefined;
+      status?: 'active' | 'inactive' | undefined;
+    } = {};
+    if (trimmedName !== undefined) {
+      updateData.name = trimmedName;
+    }
+    if (input.status !== undefined) {
+      updateData.status = input.status;
+    }
+
+    const updated = await this.repository.updateGenre(id, updateData);
+
+    let message: string;
+    if (input.name !== undefined) {
+      message = API_MESSAGES.GENRE_UPDATED;
+    } else if (input.status === 'inactive') {
+      message = API_MESSAGES.GENRE_DEACTIVATED;
+    } else {
+      message = API_MESSAGES.GENRE_ACTIVATED;
+    }
+
+    return {
+      data: {
+        id: updated.id,
+        name: updated.name,
+        status: updated.status,
+      },
+      message,
+    };
+  }
+
+  async deleteGenre(
+    id: string,
+  ): Promise<ApiSuccessEnvelope<DeleteGenreResponseData>> {
+    const existing = await this.repository.getGenreById(id);
+    if (!existing) {
+      throw createNotFoundError('Genre tidak ditemukan.');
+    }
+
+    const inUse = await this.repository.isGenreInUse(id);
+    if (inUse) {
+      throw createGenreInUseError();
+    }
+
+    await this.repository.deleteGenre(id);
+
+    return {
+      data: { id },
+      message: API_MESSAGES.GENRE_DELETED,
     };
   }
 }
