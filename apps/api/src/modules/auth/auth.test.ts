@@ -358,6 +358,24 @@ describe('auth module - POST /api/v1/auth/register/validate & POST /api/v1/auth/
       async deleteSessionByTokenHash() {
         return false;
       },
+      async listUsers() {
+        return { items: [], total: 0 };
+      },
+      async findUserById() {
+        return null;
+      },
+      async createAdminUser() {
+        return { status: 'email_conflict' };
+      },
+      async updateUser() {
+        return null;
+      },
+      async hasActiveLoans() {
+        return false;
+      },
+      async updateUserStatus() {
+        return null;
+      },
     };
 
     const { app } = createTestHarness({ authRepository: raceRepository });
@@ -976,5 +994,862 @@ describe('auth API (BE-S1-02)', () => {
 
     const deleted = await repo.deleteSessionByTokenHash('hash-1');
     expect(deleted).toBe(true);
+  });
+});
+
+describe('Management User Admin API (BE-S1-05 / US-12)', () => {
+  async function getSessionCookie(
+    app: ReturnType<typeof createApp>,
+    email: string,
+    password = 'password123',
+  ): Promise<string> {
+    const res = await app.handle(
+      new Request('http://localhost/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      }),
+    );
+    const body = (await res.json()) as { data: { token: string } };
+    return `readonly_session=${body.data.token}`;
+  }
+
+  it('enforces RBAC on all /admin/users endpoints (401 unauthenticated, 403 member)', async () => {
+    const { app } = createTestHarness();
+    const memberCookie = await getSessionCookie(
+      app,
+      'member1@readonly.ppu.co.id',
+    );
+    const targetUserId = QA_IDS.users.member1;
+
+    const testEndpoints = [
+      { method: 'GET', url: 'http://localhost/api/v1/admin/users', body: null },
+      {
+        method: 'GET',
+        url: `http://localhost/api/v1/admin/users/${targetUserId}`,
+        body: null,
+      },
+      {
+        method: 'POST',
+        url: 'http://localhost/api/v1/admin/users',
+        body: {
+          full_name: 'Test Admin',
+          email: 'testadmin@readonly.ppu.co.id',
+          phone_number: '081100009999',
+          password: 'password123',
+          confirm_password: 'password123',
+        },
+      },
+      {
+        method: 'PATCH',
+        url: `http://localhost/api/v1/admin/users/${targetUserId}`,
+        body: {
+          full_name: 'Member Updated',
+          phone_number: '081299998888',
+          address: 'Jl. Baru No. 1',
+        },
+      },
+      {
+        method: 'PATCH',
+        url: `http://localhost/api/v1/admin/users/${targetUserId}/status`,
+        body: { status: 'inactive' },
+      },
+    ];
+
+    for (const ep of testEndpoints) {
+      const unauthInit: RequestInit = {
+        method: ep.method,
+      };
+      if (ep.body) {
+        unauthInit.headers = { 'content-type': 'application/json' };
+        unauthInit.body = JSON.stringify(ep.body);
+      }
+
+      const unauthRes = await app.handle(new Request(ep.url, unauthInit));
+      expect(unauthRes.status).toBe(401);
+      const unauthJson = await unauthRes.json();
+      expect(unauthJson.code).toBe('session_not_found');
+
+      const memberInit: RequestInit = {
+        method: ep.method,
+        headers: {
+          cookie: memberCookie,
+          ...(ep.body ? { 'content-type': 'application/json' } : {}),
+        },
+      };
+      if (ep.body) {
+        memberInit.body = JSON.stringify(ep.body);
+      }
+
+      const memberRes = await app.handle(new Request(ep.url, memberInit));
+      expect(memberRes.status).toBe(403);
+      const memberJson = await memberRes.json();
+      expect(memberJson.code).toBe('forbidden');
+    }
+  });
+
+  it('GET /admin/users returns paginated users list without sensitive fields or addresses (AC-12.01)', async () => {
+    const { app, authRepository } = createTestHarness();
+    const adminCookie = await getSessionCookie(app, 'admin@readonly.ppu.co.id');
+    const totalUsers = authRepository.getUsers().length;
+
+    const res = await app.handle(
+      new Request('http://localhost/api/v1/admin/users?page=1&limit=2', {
+        headers: { cookie: adminCookie },
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data).toHaveLength(2);
+    expect(body.pagination).toEqual({
+      page: 1,
+      limit: 2,
+      total: totalUsers,
+      totalPages: Math.ceil(totalUsers / 2),
+    });
+
+    for (const user of body.data) {
+      expect(user).toHaveProperty('id');
+      expect(user).toHaveProperty('full_name');
+      expect(user).toHaveProperty('email');
+      expect(user).toHaveProperty('phone_number');
+      expect(user).toHaveProperty('role');
+      expect(user).toHaveProperty('status');
+      expect(user).not.toHaveProperty('address');
+      expect(user).not.toHaveProperty('password');
+      expect(user).not.toHaveProperty('passwordHash');
+    }
+  });
+
+  it('GET /admin/users filters by role and searches by name or email (AC-12.11)', async () => {
+    const { app } = createTestHarness();
+    const adminCookie = await getSessionCookie(app, 'admin@readonly.ppu.co.id');
+
+    const adminOnlyRes = await app.handle(
+      new Request('http://localhost/api/v1/admin/users?role=admin', {
+        headers: { cookie: adminCookie },
+      }),
+    );
+    expect(adminOnlyRes.status).toBe(200);
+    const adminOnlyBody = await adminOnlyRes.json();
+    expect(adminOnlyBody.data.length).toBeGreaterThanOrEqual(1);
+    for (const user of adminOnlyBody.data) {
+      expect(user.role).toBe('admin');
+    }
+
+    const memberOnlyRes = await app.handle(
+      new Request('http://localhost/api/v1/admin/users?role=member', {
+        headers: { cookie: adminCookie },
+      }),
+    );
+    expect(memberOnlyRes.status).toBe(200);
+    const memberOnlyBody = await memberOnlyRes.json();
+    expect(memberOnlyBody.data.length).toBeGreaterThanOrEqual(1);
+    for (const user of memberOnlyBody.data) {
+      expect(user.role).toBe('member');
+    }
+
+    const searchByNameRes = await app.handle(
+      new Request('http://localhost/api/v1/admin/users?q=member satu', {
+        headers: { cookie: adminCookie },
+      }),
+    );
+    expect(searchByNameRes.status).toBe(200);
+    const searchByNameBody = await searchByNameRes.json();
+    expect(searchByNameBody.data).toHaveLength(1);
+    expect(searchByNameBody.data[0].full_name).toBe('Member Satu');
+
+    const searchByEmailRes = await app.handle(
+      new Request('http://localhost/api/v1/admin/users?q=inactive@readonly', {
+        headers: { cookie: adminCookie },
+      }),
+    );
+    expect(searchByEmailRes.status).toBe(200);
+    const searchByEmailBody = await searchByEmailRes.json();
+    expect(searchByEmailBody.data).toHaveLength(1);
+    expect(searchByEmailBody.data[0].email).toBe('inactive@readonly.ppu.co.id');
+
+    const emptyRes = await app.handle(
+      new Request(
+        'http://localhost/api/v1/admin/users?q=tidakadauserini12345',
+        {
+          headers: { cookie: adminCookie },
+        },
+      ),
+    );
+    expect(emptyRes.status).toBe(200);
+    const emptyBody = await emptyRes.json();
+    expect(emptyBody.data).toEqual([]);
+    expect(emptyBody.pagination).toEqual({
+      page: 1,
+      limit: 10,
+      total: 0,
+      totalPages: 0,
+    });
+  });
+
+  it('GET /admin/users rejects invalid query parameters with 422 invalid_request', async () => {
+    const { app } = createTestHarness();
+    const adminCookie = await getSessionCookie(app, 'admin@readonly.ppu.co.id');
+
+    const invalidLimitRes = await app.handle(
+      new Request('http://localhost/api/v1/admin/users?limit=99', {
+        headers: { cookie: adminCookie },
+      }),
+    );
+    expect(invalidLimitRes.status).toBe(422);
+
+    const invalidRoleRes = await app.handle(
+      new Request('http://localhost/api/v1/admin/users?role=guest', {
+        headers: { cookie: adminCookie },
+      }),
+    );
+    expect(invalidRoleRes.status).toBe(422);
+  });
+
+  it('GET /admin/users/:id returns user detail with role-dependent address (AC-12.05)', async () => {
+    const { app } = createTestHarness();
+    const adminCookie = await getSessionCookie(app, 'admin@readonly.ppu.co.id');
+
+    const adminDetailRes = await app.handle(
+      new Request(`http://localhost/api/v1/admin/users/${QA_IDS.users.admin}`, {
+        headers: { cookie: adminCookie },
+      }),
+    );
+    expect(adminDetailRes.status).toBe(200);
+    const adminDetailBody = await adminDetailRes.json();
+    expect(adminDetailBody.data).toEqual({
+      id: QA_IDS.users.admin,
+      full_name: 'Admin Perpus',
+      email: 'admin@readonly.ppu.co.id',
+      phone_number: '081100000001',
+      address: null,
+      role: 'admin',
+      status: 'active',
+    });
+
+    const memberDetailRes = await app.handle(
+      new Request(
+        `http://localhost/api/v1/admin/users/${QA_IDS.users.member1}`,
+        {
+          headers: { cookie: adminCookie },
+        },
+      ),
+    );
+    expect(memberDetailRes.status).toBe(200);
+    const memberDetailBody = await memberDetailRes.json();
+    expect(memberDetailBody.data).toEqual({
+      id: QA_IDS.users.member1,
+      full_name: 'Member Satu',
+      email: 'member1@readonly.ppu.co.id',
+      phone_number: '081200000001',
+      address: 'Jl. Sudirman No. 1, Jakarta',
+      role: 'member',
+      status: 'active',
+    });
+
+    const notFoundRes = await app.handle(
+      new Request(
+        'http://localhost/api/v1/admin/users/00000000-0000-4000-8000-000000000999',
+        {
+          headers: { cookie: adminCookie },
+        },
+      ),
+    );
+    expect(notFoundRes.status).toBe(404);
+    expect(await notFoundRes.json()).toEqual({
+      statusCode: 404,
+      error: 'Not Found',
+      code: 'not_found',
+      message: 'User tidak ditemukan.',
+    });
+
+    const invalidUuidRes = await app.handle(
+      new Request('http://localhost/api/v1/admin/users/bukan-uuid', {
+        headers: { cookie: adminCookie },
+      }),
+    );
+    expect(invalidUuidRes.status).toBe(404);
+  });
+
+  it('POST /admin/users creates an Admin account and permits login (AC-12.02)', async () => {
+    const { app } = createTestHarness();
+    const adminCookie = await getSessionCookie(app, 'admin@readonly.ppu.co.id');
+
+    const createRes = await app.handle(
+      new Request('http://localhost/api/v1/admin/users', {
+        method: 'POST',
+        headers: {
+          cookie: adminCookie,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          full_name: 'Admin Dua',
+          email: 'admin2@readonly.ppu.co.id',
+          phone_number: '081100000005',
+          password: 'password123',
+          confirm_password: 'password123',
+        }),
+      }),
+    );
+
+    expect(createRes.status).toBe(201);
+    const createBody = await createRes.json();
+    expect(createBody.message).toBe('Admin berhasil ditambahkan');
+    expect(createBody.data).toMatchObject({
+      full_name: 'Admin Dua',
+      email: 'admin2@readonly.ppu.co.id',
+      phone_number: '081100000005',
+      role: 'admin',
+      status: 'active',
+    });
+
+    const newAdminCookie = await getSessionCookie(
+      app,
+      'admin2@readonly.ppu.co.id',
+      'password123',
+    );
+    const meRes = await app.handle(
+      new Request('http://localhost/api/v1/auth/me', {
+        headers: { cookie: newAdminCookie },
+      }),
+    );
+    expect(meRes.status).toBe(200);
+    const meBody = await meRes.json();
+    expect(meBody.data.role).toBe('admin');
+  });
+
+  it('POST /admin/users validates mandatory fields and formats (AC-12.03, AC-12.04)', async () => {
+    const { app } = createTestHarness();
+    const adminCookie = await getSessionCookie(app, 'admin@readonly.ppu.co.id');
+
+    const emptyFieldRes = await app.handle(
+      new Request('http://localhost/api/v1/admin/users', {
+        method: 'POST',
+        headers: {
+          cookie: adminCookie,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          full_name: '   ',
+          email: 'admin.new@readonly.ppu.co.id',
+          phone_number: '081100000006',
+          password: 'password123',
+          confirm_password: 'password123',
+        }),
+      }),
+    );
+    expect(emptyFieldRes.status).toBe(422);
+    expect(await emptyFieldRes.json()).toEqual({
+      statusCode: 422,
+      error: 'Unprocessable Entity',
+      code: 'invalid_request',
+      message: 'Field harus diisi!',
+      data: { field: 'full_name' },
+    });
+
+    const invalidEmailRes = await app.handle(
+      new Request('http://localhost/api/v1/admin/users', {
+        method: 'POST',
+        headers: {
+          cookie: adminCookie,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          full_name: 'Admin New',
+          email: 'format-salah',
+          phone_number: '081100000006',
+          password: 'password123',
+          confirm_password: 'password123',
+        }),
+      }),
+    );
+    expect(invalidEmailRes.status).toBe(422);
+    expect(await invalidEmailRes.json()).toEqual({
+      statusCode: 422,
+      error: 'Unprocessable Entity',
+      code: 'invalid_request',
+      message: 'Format email salah',
+      data: { field: 'email' },
+    });
+
+    const mismatchRes = await app.handle(
+      new Request('http://localhost/api/v1/admin/users', {
+        method: 'POST',
+        headers: {
+          cookie: adminCookie,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          full_name: 'Admin New',
+          email: 'admin.new@readonly.ppu.co.id',
+          phone_number: '081100000006',
+          password: 'password123',
+          confirm_password: 'differentPassword',
+        }),
+      }),
+    );
+    expect(mismatchRes.status).toBe(422);
+    expect(await mismatchRes.json()).toEqual({
+      statusCode: 422,
+      error: 'Unprocessable Entity',
+      code: 'invalid_request',
+      message: 'Password harus sama',
+      data: { field: 'confirm_password' },
+    });
+
+    const duplicateRes = await app.handle(
+      new Request('http://localhost/api/v1/admin/users', {
+        method: 'POST',
+        headers: {
+          cookie: adminCookie,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          full_name: 'Admin New',
+          email: 'admin@readonly.ppu.co.id',
+          phone_number: '081100000006',
+          password: 'password123',
+          confirm_password: 'password123',
+        }),
+      }),
+    );
+    expect(duplicateRes.status).toBe(409);
+    expect(await duplicateRes.json()).toEqual({
+      statusCode: 409,
+      error: 'Conflict',
+      code: 'conflict',
+      message: 'Email sudah terdaftar',
+      data: { field: 'email' },
+    });
+  });
+
+  it('PATCH /admin/users/:id modifies Member data with address (AC-12.05)', async () => {
+    const { app } = createTestHarness();
+    const adminCookie = await getSessionCookie(app, 'admin@readonly.ppu.co.id');
+
+    const updateRes = await app.handle(
+      new Request(
+        `http://localhost/api/v1/admin/users/${QA_IDS.users.member1}`,
+        {
+          method: 'PATCH',
+          headers: {
+            cookie: adminCookie,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            full_name: 'Member Satu Diperbarui',
+            phone_number: '081299990001',
+            address: 'Jl. Thamrin No. 99, Jakarta',
+          }),
+        },
+      ),
+    );
+
+    expect(updateRes.status).toBe(200);
+    const body = await updateRes.json();
+    expect(body.message).toBe('Data user berhasil diubah');
+    expect(body.data).toEqual({
+      id: QA_IDS.users.member1,
+      full_name: 'Member Satu Diperbarui',
+      phone_number: '081299990001',
+      address: 'Jl. Thamrin No. 99, Jakarta',
+      role: 'member',
+    });
+  });
+
+  it('PATCH /admin/users/:id modifies Admin data without address (AC-12.05)', async () => {
+    const { app } = createTestHarness();
+    const adminCookie = await getSessionCookie(app, 'admin@readonly.ppu.co.id');
+
+    const updateRes = await app.handle(
+      new Request(`http://localhost/api/v1/admin/users/${QA_IDS.users.admin}`, {
+        method: 'PATCH',
+        headers: {
+          cookie: adminCookie,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          full_name: 'Admin Utama',
+          phone_number: '081199998888',
+        }),
+      }),
+    );
+
+    expect(updateRes.status).toBe(200);
+    const body = await updateRes.json();
+    expect(body.message).toBe('Data user berhasil diubah');
+    expect(body.data).toEqual({
+      id: QA_IDS.users.admin,
+      full_name: 'Admin Utama',
+      phone_number: '081199998888',
+      address: null,
+      role: 'admin',
+    });
+  });
+
+  it('PATCH /admin/users/:id rejects extra/disallowed fields and missing fields (AC-12.03, AC-12.05)', async () => {
+    const { app } = createTestHarness();
+    const adminCookie = await getSessionCookie(app, 'admin@readonly.ppu.co.id');
+
+    const emailAttemptRes = await app.handle(
+      new Request(
+        `http://localhost/api/v1/admin/users/${QA_IDS.users.member1}`,
+        {
+          method: 'PATCH',
+          headers: {
+            cookie: adminCookie,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            full_name: 'Member Baru',
+            phone_number: '081299990001',
+            address: 'Jl. Baru',
+            email: 'gantiemail@gmail.com',
+          }),
+        },
+      ),
+    );
+    expect(emailAttemptRes.status).toBe(422);
+
+    const adminAddressAttemptRes = await app.handle(
+      new Request(`http://localhost/api/v1/admin/users/${QA_IDS.users.admin}`, {
+        method: 'PATCH',
+        headers: {
+          cookie: adminCookie,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          full_name: 'Admin Utama',
+          phone_number: '081199998888',
+          address: 'Alamat Admin',
+        }),
+      }),
+    );
+    expect(adminAddressAttemptRes.status).toBe(422);
+
+    const emptyPhoneRes = await app.handle(
+      new Request(
+        `http://localhost/api/v1/admin/users/${QA_IDS.users.member1}`,
+        {
+          method: 'PATCH',
+          headers: {
+            cookie: adminCookie,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            full_name: 'Member Baru',
+            phone_number: '',
+            address: 'Jl. Baru',
+          }),
+        },
+      ),
+    );
+    expect(emptyPhoneRes.status).toBe(422);
+    expect(await emptyPhoneRes.json()).toEqual({
+      statusCode: 422,
+      error: 'Unprocessable Entity',
+      code: 'invalid_request',
+      message: 'Field harus diisi!',
+      data: { field: 'phone_number' },
+    });
+  });
+
+  it('PATCH /admin/users/:id/status prevents self-deactivation (AC-12.09)', async () => {
+    const { app } = createTestHarness();
+    const adminCookie = await getSessionCookie(app, 'admin@readonly.ppu.co.id');
+
+    const res = await app.handle(
+      new Request(
+        `http://localhost/api/v1/admin/users/${QA_IDS.users.admin}/status`,
+        {
+          method: 'PATCH',
+          headers: {
+            cookie: adminCookie,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({ status: 'inactive' }),
+        },
+      ),
+    );
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({
+      statusCode: 403,
+      error: 'Forbidden',
+      code: 'cannot_deactivate_self',
+      message: 'Admin tidak dapat menonaktifkan akunnya sendiri',
+    });
+  });
+
+  it('PATCH /admin/users/:id/status prevents deactivating member with active loans (AC-12.10)', async () => {
+    const { app } = createTestHarness();
+    const adminCookie = await getSessionCookie(app, 'admin@readonly.ppu.co.id');
+
+    const res = await app.handle(
+      new Request(
+        `http://localhost/api/v1/admin/users/${QA_IDS.users.member1}/status`,
+        {
+          method: 'PATCH',
+          headers: {
+            cookie: adminCookie,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({ status: 'inactive' }),
+        },
+      ),
+    );
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      statusCode: 409,
+      error: 'Conflict',
+      code: 'account_has_active_loans',
+      message:
+        'Akun tidak dapat dinonaktifkan karena masih memiliki peminjaman aktif',
+    });
+  });
+
+  it('PATCH /admin/users/:id/status deactivates eligible user and blocks subsequent login (AC-12.06, AC-12.07)', async () => {
+    const { app, authRepository } = createTestHarness();
+    const adminCookie = await getSessionCookie(app, 'admin@readonly.ppu.co.id');
+    const eligibleUserId = '00000000-0000-4000-8000-000000000099';
+
+    authRepository.clearLoans();
+
+    const deactivateRes = await app.handle(
+      new Request(
+        `http://localhost/api/v1/admin/users/${eligibleUserId}/status`,
+        {
+          method: 'PATCH',
+          headers: {
+            cookie: adminCookie,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({ status: 'inactive' }),
+        },
+      ),
+    );
+
+    expect(deactivateRes.status).toBe(200);
+    expect(await deactivateRes.json()).toEqual({
+      data: {
+        id: eligibleUserId,
+        status: 'inactive',
+      },
+      message: 'Akun berhasil dinonaktifkan',
+    });
+
+    const loginRes = await app.handle(
+      new Request('http://localhost/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          email: 'newmember@gmail.com',
+          password: 'password',
+        }),
+      }),
+    );
+    expect(loginRes.status).toBe(403);
+    expect(await loginRes.json()).toEqual({
+      statusCode: 403,
+      error: 'Forbidden',
+      code: 'account_inactive',
+      message: 'Akun Anda tidak aktif. Silakan hubungi Admin Perpus.',
+    });
+  });
+
+  it('PATCH /admin/users/:id/status reactivates user and allows login (AC-12.08)', async () => {
+    const { app } = createTestHarness();
+    const adminCookie = await getSessionCookie(app, 'admin@readonly.ppu.co.id');
+    const inactiveUserId = QA_IDS.users.inactiveMember;
+
+    const activateRes = await app.handle(
+      new Request(
+        `http://localhost/api/v1/admin/users/${inactiveUserId}/status`,
+        {
+          method: 'PATCH',
+          headers: {
+            cookie: adminCookie,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({ status: 'active' }),
+        },
+      ),
+    );
+
+    expect(activateRes.status).toBe(200);
+    expect(await activateRes.json()).toEqual({
+      data: {
+        id: inactiveUserId,
+        status: 'active',
+      },
+      message: 'Akun berhasil diaktifkan',
+    });
+
+    const loginRes = await app.handle(
+      new Request('http://localhost/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          email: 'inactive@readonly.ppu.co.id',
+          password: 'password123',
+        }),
+      }),
+    );
+    expect(loginRes.status).toBe(200);
+    const loginBody = await loginRes.json();
+    expect(loginBody.message).toBe('Login Berhasil');
+  });
+
+  it('delegates Management User queries in DrizzleAuthRepository to Drizzle db', async () => {
+    let selectCallCount = 0;
+    const fakeDb = {
+      select() {
+        selectCallCount++;
+        return {
+          from() {
+            return {
+              where() {
+                return {
+                  orderBy() {
+                    return {
+                      limit() {
+                        return {
+                          async offset() {
+                            return [
+                              {
+                                id: QA_IDS.users.admin,
+                                fullName: 'Admin Drizzle',
+                                email: 'admin.drizzle@readonly.ppu.co.id',
+                                phoneNumber: '081100000001',
+                                role: 'admin',
+                                status: 'active',
+                              },
+                            ];
+                          },
+                        };
+                      },
+                    };
+                  },
+                  async limit() {
+                    return [
+                      {
+                        id: QA_IDS.users.admin,
+                        fullName: 'Admin Drizzle',
+                        email: 'admin.drizzle@readonly.ppu.co.id',
+                        passwordHash: 'hash',
+                        address: null,
+                        phoneNumber: '081100000001',
+                        role: 'admin',
+                        status: 'active',
+                        createdAt: new Date(),
+                      },
+                    ];
+                  },
+                };
+              },
+            };
+          },
+        };
+      },
+      update() {
+        return {
+          set() {
+            return {
+              where() {
+                return {
+                  async returning() {
+                    return [
+                      {
+                        id: QA_IDS.users.admin,
+                        fullName: 'Admin Drizzle Updated',
+                        email: 'admin.drizzle@readonly.ppu.co.id',
+                        passwordHash: 'hash',
+                        address: null,
+                        phoneNumber: '081100000002',
+                        role: 'admin',
+                        status: 'inactive',
+                        createdAt: new Date(),
+                      },
+                    ];
+                  },
+                };
+              },
+            };
+          },
+        };
+      },
+      async transaction(fn: (tx: unknown) => unknown) {
+        const tx = {
+          select() {
+            return {
+              from() {
+                return {
+                  where() {
+                    return {
+                      async limit() {
+                        return [];
+                      },
+                    };
+                  },
+                };
+              },
+            };
+          },
+          insert() {
+            return {
+              values() {
+                return {
+                  async returning() {
+                    return [
+                      {
+                        id: '00000000-0000-4000-8000-000000000088',
+                        fullName: 'Admin Tx',
+                        email: 'admintx@readonly.ppu.co.id',
+                        phoneNumber: '081100000088',
+                        role: 'admin',
+                        status: 'active',
+                      },
+                    ];
+                  },
+                };
+              },
+            };
+          },
+        };
+        return fn(tx);
+      },
+    } as unknown as Database;
+
+    const repo = new DrizzleAuthRepository(fakeDb);
+    const user = await repo.findUserById(QA_IDS.users.admin);
+    expect(user?.fullName).toBe('Admin Drizzle');
+
+    const created = await repo.createAdminUser({
+      fullName: 'Admin Tx',
+      email: 'admintx@readonly.ppu.co.id',
+      passwordHash: 'hash',
+      phoneNumber: '081100000088',
+      createdAt: new Date(),
+    });
+    expect(created.status).toBe('created');
+    if (created.status === 'created') {
+      expect(created.user.email).toBe('admintx@readonly.ppu.co.id');
+    }
+
+    const updated = await repo.updateUser(QA_IDS.users.admin, {
+      fullName: 'Admin Drizzle Updated',
+      phoneNumber: '081100000002',
+    });
+    expect(updated?.fullName).toBe('Admin Drizzle Updated');
+
+    const updatedStatus = await repo.updateUserStatus(
+      QA_IDS.users.admin,
+      'inactive',
+    );
+    expect(updatedStatus?.status).toBe('inactive');
+    expect(selectCallCount).toBeGreaterThan(0);
   });
 });

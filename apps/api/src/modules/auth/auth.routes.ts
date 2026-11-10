@@ -193,61 +193,89 @@ export function createAuthRoutes(
   registerRateLimiter: RateLimiter,
   loginRateLimiter: RateLimiter,
 ) {
-  return new Elysia({ prefix: '/auth' })
-    .post('/register/validate', async ({ body, request }) => {
-      const clientIp = extractClientIp(request);
-      if (!registerRateLimiter.consume(`register:${clientIp}`)) {
-        throw createRateLimitError();
-      }
+  return new Elysia()
+    .group('/auth', (group) =>
+      group
+        .post('/register/validate', async ({ body, request }) => {
+          const clientIp = extractClientIp(request);
+          if (!registerRateLimiter.consume(`register:${clientIp}`)) {
+            throw createRateLimitError();
+          }
 
-      return authService.validateRegistrationStep1(body);
+          return authService.validateRegistrationStep1(body);
+        })
+        .post('/register', async ({ body, request, set }) => {
+          const clientIp = extractClientIp(request);
+          if (!registerRateLimiter.consume(`register:${clientIp}`)) {
+            throw createRateLimitError();
+          }
+
+          const result = await authService.registerMember(body);
+          set.status = 201;
+          return result;
+        })
+        .post('/login', async ({ body, request, set }) => {
+          const clientIp = extractClientIp(request);
+          const ipKey = `login:ip:${clientIp}`;
+          const normalizedEmail = extractNormalizedEmailFromBody(body);
+          const ipEmailKey = normalizedEmail
+            ? `login:ip-email:${clientIp}:${normalizedEmail}`
+            : null;
+
+          const ipAllowed = loginRateLimiter.consume(ipKey);
+          const emailAllowed = ipEmailKey
+            ? loginRateLimiter.consume(ipEmailKey)
+            : true;
+
+          if (!ipAllowed || !emailAllowed) {
+            throw createRateLimitError();
+          }
+
+          const result = await authService.login(body);
+
+          loginRateLimiter.reset(ipKey);
+          if (ipEmailKey) {
+            loginRateLimiter.reset(ipEmailKey);
+          }
+
+          set.headers['set-cookie'] = buildSessionCookie(result.sessionToken);
+          return result.envelope;
+        })
+        .get('/me', async ({ request }) => {
+          const session = await requireAuth(request, authService);
+          return authService.getMe(session.user);
+        })
+        .post('/logout', async ({ request, set }) => {
+          const session = await requireAuth(request, authService);
+          await authService.logout(session.tokenHash);
+          set.headers['set-cookie'] = buildClearSessionCookie();
+          set.status = 204;
+          return null;
+        }),
+    )
+    .get('/admin/users', async ({ query, request }) => {
+      await requireRole(request, authService, 'admin');
+      return authService.listUsers(query);
     })
-    .post('/register', async ({ body, request, set }) => {
-      const clientIp = extractClientIp(request);
-      if (!registerRateLimiter.consume(`register:${clientIp}`)) {
-        throw createRateLimitError();
-      }
-
-      const result = await authService.registerMember(body);
+    .get('/admin/users/:id', async ({ params: { id }, request }) => {
+      await requireRole(request, authService, 'admin');
+      return authService.getUserById(id);
+    })
+    .post('/admin/users', async ({ body, request, set }) => {
+      await requireRole(request, authService, 'admin');
+      const result = await authService.createAdminUser(body);
       set.status = 201;
       return result;
     })
-    .post('/login', async ({ body, request, set }) => {
-      const clientIp = extractClientIp(request);
-      const ipKey = `login:ip:${clientIp}`;
-      const normalizedEmail = extractNormalizedEmailFromBody(body);
-      const ipEmailKey = normalizedEmail
-        ? `login:ip-email:${clientIp}:${normalizedEmail}`
-        : null;
-
-      const ipAllowed = loginRateLimiter.consume(ipKey);
-      const emailAllowed = ipEmailKey
-        ? loginRateLimiter.consume(ipEmailKey)
-        : true;
-
-      if (!ipAllowed || !emailAllowed) {
-        throw createRateLimitError();
-      }
-
-      const result = await authService.login(body);
-
-      loginRateLimiter.reset(ipKey);
-      if (ipEmailKey) {
-        loginRateLimiter.reset(ipEmailKey);
-      }
-
-      set.headers['set-cookie'] = buildSessionCookie(result.sessionToken);
-      return result.envelope;
-    })
-    .get('/me', async ({ request }) => {
-      const session = await requireAuth(request, authService);
-      return authService.getMe(session.user);
-    })
-    .post('/logout', async ({ request, set }) => {
-      const session = await requireAuth(request, authService);
-      await authService.logout(session.tokenHash);
-      set.headers['set-cookie'] = buildClearSessionCookie();
-      set.status = 204;
-      return null;
+    .patch(
+      '/admin/users/:id/status',
+      async ({ body, params: { id }, request }) => {
+        const session = await requireRole(request, authService, 'admin');
+        return authService.updateUserStatus(id, body, session.user);
+      },
+    )
+    .patch('/admin/users/:id', async ({ body, params: { id }, request }) => {
+      await requireRole(request, authService, 'admin');
+      return authService.updateUser(id, body);
     });
 }
