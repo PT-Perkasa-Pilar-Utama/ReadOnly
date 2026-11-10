@@ -1,7 +1,11 @@
-import { For } from 'solid-js';
+import { useNavigate } from '@tanstack/solid-router';
+import { createSignal, For, Show } from 'solid-js';
+import { currentUser, endSession } from '../lib/session';
+import { notify } from './Feedback';
+import Icon from './Icon';
 import './AdminHeader.css';
 
-type AdminSection = 'dashboard' | 'books' | 'loans';
+type AdminSection = 'dashboard' | 'books' | 'loans' | 'users';
 
 const ADMIN_NAVIGATION = [
   { label: 'Dashboard', section: 'dashboard', href: '/', available: true },
@@ -23,6 +27,13 @@ const ADMIN_NAVIGATION = [
     href: '/admin/genres',
     available: false,
   },
+  // AC-12.01: Management User dapat dibuka dari seluruh halaman Admin.
+  {
+    label: 'Management User',
+    section: 'users',
+    href: '/admin/users',
+    available: true,
+  },
 ] as const;
 
 interface AdminHeaderProps {
@@ -30,6 +41,26 @@ interface AdminHeaderProps {
 }
 
 export function AdminHeader(props: AdminHeaderProps) {
+  const navigate = useNavigate();
+  const [busy, setBusy] = createSignal(false);
+  async function signOut() {
+    if (busy()) return;
+    setBusy(true);
+    try {
+      // AC-03.01: sesi server diakhiri sebelum kembali ke halaman login.
+      await endSession();
+      await navigate({ to: '/login', replace: true });
+    } catch (error) {
+      notify(
+        error instanceof Error
+          ? error.message
+          : 'Logout gagal. Silakan coba lagi.',
+        'error',
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <header class="admin-header">
       <div class="admin-header__inner">
@@ -73,7 +104,27 @@ export function AdminHeader(props: AdminHeaderProps) {
           </For>
         </nav>
 
-        <span class="admin-header__role">Admin Perpus</span>
+        <div class="admin-header__account">
+          <div class="admin-header__identity">
+            <span class="admin-header__role">
+              {currentUser()?.full_name ?? 'Admin Perpus'}
+            </span>
+            <Show when={currentUser()?.email}>
+              <span class="admin-header__email">{currentUser()?.email}</span>
+            </Show>
+          </div>
+          <button
+            type="button"
+            class="admin-header__logout"
+            aria-label="Logout"
+            title="Logout"
+            disabled={busy()}
+            onClick={signOut}
+          >
+            <Icon name="logout" size={20} />
+            <span>Logout</span>
+          </button>
+        </div>
       </div>
     </header>
   );
