@@ -70,20 +70,55 @@
 }
 
 .admin-header__role {
-  flex: 0 0 auto;
   color: rgb(255 255 255 / 94%);
   font-size: 13px;
   font-weight: 600;
-  white-space: nowrap;
+}
+
+.admin-header__account {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 16px;
+}
+
+.admin-header__identity {
+  display: flex;
+  min-width: 0;
+  max-width: 210px;
+  flex-direction: column;
+  overflow-wrap: anywhere;
+}
+
+.admin-header__email {
+  font-size: 11px;
+}
+
+.admin-header__logout {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  border: 0;
+  border-left: 1px solid rgb(255 255 255 / 35%);
+  padding: 7px 0 7px 16px;
+  background: transparent;
+  color: #fff;
+  font-size: 12px;
+}
+
+.admin-header__logout:hover:not(:disabled) {
+  background: rgb(255 255 255 / 10%);
 }
 
 .admin-header__brand:focus-visible,
-.admin-header__link:focus-visible {
+.admin-header__link:focus-visible,
+.admin-header__logout:focus-visible {
   outline: 3px solid #e4c87f;
   outline-offset: 4px;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1200px) {
   .admin-header__inner {
     width: min(100% - 48px, 1380px);
     flex-wrap: wrap;
@@ -92,13 +127,13 @@
   }
 
   .admin-header__brand,
-  .admin-header__role {
+  .admin-header__account {
     min-height: 48px;
     display: inline-flex;
     align-items: center;
   }
 
-  .admin-header__role {
+  .admin-header__account {
     margin-left: auto;
   }
 
@@ -136,5 +171,21 @@
 
   .admin-header__role {
     font-size: 12px;
+  }
+
+  .admin-header__account {
+    gap: 8px;
+  }
+
+  .admin-header__identity {
+    max-width: 160px;
+  }
+
+  .admin-header__logout {
+    padding-left: 8px;
+  }
+
+  .admin-header__logout span {
+    display: none;
   }
 }
