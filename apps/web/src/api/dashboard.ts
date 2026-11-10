@@ -12,68 +12,33 @@ export interface DashboardSummary {
   };
 }
 
-const LOCAL_DASHBOARD_FIXTURE: DashboardSummary = {
-  totalBooks: 12,
-  totalAvailability: 8,
-  borrowedCount: 2,
-  overdueCount: 6,
-  returnedCount: 2,
-  pieChart: {
-    onTime: 1,
-    late: 1,
-  },
-};
-
-// Local development uses a fixture until the Dashboard API endpoint is implemented.
-// Set VITE_DASHBOARD_DATA_SOURCE=api to test the real endpoint before production.
-const USE_LOCAL_DASHBOARD_FIXTURE =
-  import.meta.env?.DEV && import.meta.env?.VITE_DASHBOARD_DATA_SOURCE !== 'api';
-
-export const isDashboardUsingLocalFixture = USE_LOCAL_DASHBOARD_FIXTURE;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
 
 function isNonNegativeInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0;
 }
 
 function isDashboardSummary(value: unknown): value is DashboardSummary {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+  if (!isRecord(value) || !isRecord(value.pieChart)) {
     return false;
   }
-
-  const summary = value as Record<string, unknown>;
-  const pieChart = summary.pieChart;
-
-  if (
-    typeof pieChart !== 'object' ||
-    pieChart === null ||
-    Array.isArray(pieChart)
-  ) {
-    return false;
-  }
-
-  const chart = pieChart as Record<string, unknown>;
 
   return (
-    isNonNegativeInteger(summary.totalBooks) &&
-    isNonNegativeInteger(summary.totalAvailability) &&
-    isNonNegativeInteger(summary.borrowedCount) &&
-    isNonNegativeInteger(summary.overdueCount) &&
-    isNonNegativeInteger(summary.returnedCount) &&
-    isNonNegativeInteger(chart.onTime) &&
-    isNonNegativeInteger(chart.late)
+    isNonNegativeInteger(value.totalBooks) &&
+    isNonNegativeInteger(value.totalAvailability) &&
+    isNonNegativeInteger(value.borrowedCount) &&
+    isNonNegativeInteger(value.overdueCount) &&
+    isNonNegativeInteger(value.returnedCount) &&
+    isNonNegativeInteger(value.pieChart.onTime) &&
+    isNonNegativeInteger(value.pieChart.late)
   );
 }
 
 export async function getDashboardSummary(
   signal?: AbortSignal,
 ): Promise<DashboardSummary> {
-  if (USE_LOCAL_DASHBOARD_FIXTURE) {
-    return {
-      ...LOCAL_DASHBOARD_FIXTURE,
-      pieChart: { ...LOCAL_DASHBOARD_FIXTURE.pieChart },
-    };
-  }
-
   const response = await apiGet<unknown>('/admin/dashboard/summary', signal);
 
   if (!isDashboardSummary(response)) {

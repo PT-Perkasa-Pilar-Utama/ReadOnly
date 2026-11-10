@@ -1,12 +1,15 @@
 import {
   ALLOWED_COVER_EXTENSIONS,
   ALLOWED_COVER_MIME_TYPES,
+  type GenreItem,
   type GenreStatus,
   MAX_COVER_SIZE_BYTES,
   type Pagination,
 } from '@readonly/shared';
 import {
+  ApiRequestError,
   apiDelete,
+  apiGet,
   apiGetResponse,
   apiPatchForm,
   apiPostForm,
@@ -78,46 +81,40 @@ export async function getAdminBooks(
     makeQueryPath(query),
     signal,
   );
-  const total = response.pagination?.total ?? response.data.length;
+  if (!response.pagination || !response.authors) {
+    throw new ApiRequestError(
+      502,
+      'invalid_response',
+      'Respons server tidak sesuai. Silakan coba lagi.',
+    );
+  }
 
   return {
     books: response.data,
-    authors: response.authors ?? [],
-    pagination: response.pagination ?? {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    },
+    authors: response.authors,
+    pagination: response.pagination,
   };
 }
 
 export async function getAdminGenres(
   signal?: AbortSignal,
 ): Promise<AdminGenre[]> {
-  const firstPage = await apiGetResponse<AdminGenre[]>(
-    '/admin/genres?page=1&limit=50',
-    signal,
-  );
-  const genres = [...firstPage.data];
-  const totalPages = firstPage.pagination?.totalPages ?? 1;
+  const activeGenres = await apiGet<GenreItem[]>('/genres', signal);
 
-  for (let page = 2; page <= totalPages; page += 1) {
-    const response = await apiGetResponse<AdminGenre[]>(
-      `/admin/genres?page=${page}&limit=50`,
-      signal,
-    );
-    genres.push(...response.data);
-  }
-
-  return genres.filter((genre) => genre.status === 'active');
+  return activeGenres.map((genre) => ({
+    ...genre,
+    status: 'active' as const,
+  }));
 }
 
 export async function getAdminBook(
   bookId: string,
   signal?: AbortSignal,
 ): Promise<AdminBook> {
-  const response = await apiGetResponse<AdminBook>(`/books/${bookId}`, signal);
+  const response = await apiGetResponse<AdminBook>(
+    `/books/${encodeURIComponent(bookId)}`,
+    signal,
+  );
   return response.data;
 }
 

@@ -16,6 +16,10 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : '';
 }
 
+function isAdminLoanStatus(value: string): value is AdminLoanStatus {
+  return ADMIN_LOAN_STATUSES.some((status) => status === value);
+}
+
 export function LoanManagementPage() {
   const navigate = useNavigate();
   const [searchText, setSearchText] = createSignal('');
@@ -65,7 +69,8 @@ export function LoanManagementPage() {
   }));
 
   function applyFilters() {
-    setAppliedStatus(selectedStatus() as AdminLoanStatus | '');
+    const status = selectedStatus();
+    setAppliedStatus(isAdminLoanStatus(status) ? status : '');
     setPage(1);
   }
 

@@ -4,7 +4,6 @@ import {
   type DashboardSummary,
   getDashboardSummary,
   getReturnDistribution,
-  isDashboardUsingLocalFixture,
 } from '../../api/dashboard';
 import { AdminHeader } from '../../components/AdminHeader';
 import './DashboardPage.css';
@@ -79,10 +78,6 @@ export function DashboardPage() {
           </div>
 
           <div class="dashboard-heading__actions">
-            <Show when={isDashboardUsingLocalFixture}>
-              <span class="dashboard-demo-label">Data demo lokal</span>
-            </Show>
-
             <button
               class="dashboard-scan-button"
               type="button"
