@@ -22,6 +22,11 @@ import { createBooksRoutes } from './modules/books/books.routes';
 import { BooksService } from './modules/books/books.service';
 import { createSystemRoutes, type HealthChecks } from './modules/system/health';
 import { type ClockPort, SystemClock } from './ports/clock';
+import {
+  DiskStorageAdapter,
+  MemoryStorageAdapter,
+  type StoragePort,
+} from './ports/storage';
 import { AppError } from './shared/errors';
 import { InMemoryRateLimiter, type RateLimiter } from './shared/rate-limit';
 
@@ -33,6 +38,7 @@ export interface AppOptions {
   healthChecks?: HealthChecks;
   db?: Database;
   clock?: ClockPort;
+  storagePort?: StoragePort;
   booksRepository?: BooksRepository;
   authRepository?: AuthRepository;
   booksService?: BooksService;
@@ -171,13 +177,21 @@ function resolveRateLimitWindowMs(): number {
 
 export function createApp(options?: AppOptions) {
   const clock = options?.clock ?? new SystemClock();
+  const storagePort =
+    options?.storagePort ??
+    (options?.db ? new DiskStorageAdapter() : new MemoryStorageAdapter());
   const booksRepository =
     options?.booksRepository ??
     (options?.db
       ? new DrizzleBooksRepository(options.db)
       : new InMemoryBooksRepository());
   const booksService =
-    options?.booksService ?? new BooksService(booksRepository);
+    options?.booksService ??
+    new BooksService({
+      repository: booksRepository,
+      storage: storagePort,
+      clock,
+    });
 
   const authRepository =
     options?.authRepository ??
@@ -232,6 +246,6 @@ export function createApp(options?: AppOptions) {
       return response;
     })
     .use(createSystemRoutes(healthChecks))
-    .use(createBooksRoutes(booksService))
+    .use(createBooksRoutes(booksService, authService))
     .use(createAuthRoutes(authService, registerRateLimiter, loginRateLimiter));
 }
