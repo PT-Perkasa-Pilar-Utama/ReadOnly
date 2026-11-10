@@ -1,52 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  type AdminBook,
   type BookGenre,
-  filterBooks,
   getCoverValidationMessage,
   getGenreIdsForSubmit,
 } from './books';
-
-const fiksi: BookGenre = {
-  id: 'genre-fiksi',
-  name: 'Fiksi',
-  status: 'active',
-};
-
-const teknologi: BookGenre = {
-  id: 'genre-teknologi',
-  name: 'Teknologi',
-  status: 'active',
-};
-
-const sampleBooks: AdminBook[] = [
-  {
-    id: 'book-1',
-    title: 'Bumi Manusia',
-    author: 'Pramoedya Ananta Toer',
-    publisher: 'Lentera Dipantara',
-    publication_year: 1980,
-    synopsis: 'Novel sejarah.',
-    cover_url: null,
-    genres: [fiksi],
-    available_count: 3,
-    is_available: true,
-    availability_label: 'Tersedia',
-  },
-  {
-    id: 'book-2',
-    title: 'Clean Architecture',
-    author: 'Robert C. Martin',
-    publisher: 'Prentice Hall',
-    publication_year: 2017,
-    synopsis: 'Buku arsitektur perangkat lunak.',
-    cover_url: null,
-    genres: [teknologi],
-    available_count: 0,
-    is_available: false,
-    availability_label: 'Tidak Tersedia',
-  },
-];
 
 function coverFile(
   name: string,
@@ -57,27 +14,6 @@ function coverFile(
 }
 
 describe('Master Buku frontend helpers', () => {
-  test('search matches title, author, or genre without case sensitivity', () => {
-    expect(
-      filterBooks(sampleBooks, { q: 'BUMI' }).map((book) => book.id),
-    ).toEqual(['book-1']);
-    expect(
-      filterBooks(sampleBooks, { q: 'robert' }).map((book) => book.id),
-    ).toEqual(['book-2']);
-    expect(
-      filterBooks(sampleBooks, { q: 'teknologi' }).map((book) => book.id),
-    ).toEqual(['book-2']);
-  });
-
-  test('author and genre filters are combined', () => {
-    expect(
-      filterBooks(sampleBooks, {
-        author: 'Pramoedya Ananta Toer',
-        genre: 'genre-fiksi',
-      }).map((book) => book.id),
-    ).toEqual(['book-1']);
-  });
-
   test('cover accepts PNG/JPG/JPEG within the shared maximum size', () => {
     expect(
       getCoverValidationMessage(

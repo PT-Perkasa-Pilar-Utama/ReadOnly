@@ -1,7 +1,4 @@
-import {
-  apiErrorEnvelopeSchema,
-  type Pagination,
-} from '@readonly/shared';
+import { apiErrorEnvelopeSchema, type Pagination } from '@readonly/shared';
 import type { z } from 'zod';
 
 const API_BASE_PATH = '/api/v1';
@@ -157,7 +154,9 @@ async function apiRequest<T>(
     throw new ApiRequestError(
       error.statusCode ?? response.status,
       error.code ?? 'request_failed',
-      error.message ?? error.code ?? 'Layanan belum dapat memproses permintaan. Silakan coba lagi.',
+      error.message ??
+        error.code ??
+        'Layanan belum dapat memproses permintaan. Silakan coba lagi.',
       error.data,
     );
   }

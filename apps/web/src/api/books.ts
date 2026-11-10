@@ -1,8 +1,8 @@
 import {
   ALLOWED_COVER_EXTENSIONS,
   ALLOWED_COVER_MIME_TYPES,
-  MAX_COVER_SIZE_BYTES,
   type GenreStatus,
+  MAX_COVER_SIZE_BYTES,
   type Pagination,
 } from '@readonly/shared';
 import {
@@ -74,7 +74,10 @@ export async function getAdminBooks(
   const page = query.page ?? 1;
   const limit = query.limit ?? 10;
 
-  const response = await apiGetResponse<AdminBook[]>(makeQueryPath(query), signal);
+  const response = await apiGetResponse<AdminBook[]>(
+    makeQueryPath(query),
+    signal,
+  );
   const total = response.pagination?.total ?? response.data.length;
 
   return {
@@ -89,7 +92,9 @@ export async function getAdminBooks(
   };
 }
 
-export async function getAdminGenres(signal?: AbortSignal): Promise<AdminGenre[]> {
+export async function getAdminGenres(
+  signal?: AbortSignal,
+): Promise<AdminGenre[]> {
   const firstPage = await apiGetResponse<AdminGenre[]>(
     '/admin/genres?page=1&limit=50',
     signal,
@@ -187,7 +192,6 @@ export function getGenreIdsForSubmit(
 
   return selectedGenreId ? [selectedGenreId] : [];
 }
-
 
 // API katalog buku dari branch dev (Home dan Book Detail).
 export const getBooks = (
