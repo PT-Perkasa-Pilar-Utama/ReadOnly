@@ -94,6 +94,18 @@ export function createSessionNotFoundError(
   });
 }
 
+export function createNotFoundError(
+  message = 'Resource tidak ditemukan.',
+  code = 'not_found',
+): AppError {
+  return new AppError({
+    statusCode: 404,
+    error: 'Not Found',
+    code,
+    message,
+  });
+}
+
 export function createForbiddenError(
   message: string = API_MESSAGES.FORBIDDEN,
   code = 'forbidden',

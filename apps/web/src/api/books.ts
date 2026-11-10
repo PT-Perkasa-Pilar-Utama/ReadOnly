@@ -1,7 +1,194 @@
-import { queryString, request } from './client';
+import {
+  ALLOWED_COVER_EXTENSIONS,
+  ALLOWED_COVER_MIME_TYPES,
+  type GenreItem,
+  type GenreStatus,
+  MAX_COVER_SIZE_BYTES,
+  type Pagination,
+} from '@readonly/shared';
+import {
+  ApiRequestError,
+  apiDelete,
+  apiGet,
+  apiGetResponse,
+  apiPatchForm,
+  apiPostForm,
+  queryString,
+  request,
+} from './client';
 import { bookDetailSchema, catalogSchema, envelope } from './contracts';
 
-// AC-07.01–AC-07.03: rekomendasi, pencarian, filter, dan paginasi berasal dari API.
+export interface BookGenre {
+  id: string;
+  name: string;
+  status: GenreStatus;
+}
+
+export interface AdminBook {
+  id: string;
+  title: string;
+  author: string;
+  publisher: string;
+  publication_year: number;
+  synopsis: string;
+  cover_url: string | null;
+  genres: BookGenre[];
+  available_count: number;
+  is_available: boolean;
+  availability_label: 'Tersedia' | 'Tidak Tersedia';
+  average_rating?: number | null;
+}
+
+export interface AdminGenre {
+  id: string;
+  name: string;
+  status: GenreStatus;
+  book_count?: number;
+}
+
+export interface AdminBookList {
+  books: AdminBook[];
+  authors: string[];
+  pagination: Pagination;
+}
+
+export interface AdminBookQuery {
+  q?: string;
+  author?: string;
+  genre?: string;
+  page?: number;
+  limit?: number;
+}
+
+function makeQueryPath(query: AdminBookQuery): string {
+  const params = new URLSearchParams();
+  if (query.q?.trim()) params.set('q', query.q.trim());
+  if (query.author) params.set('author', query.author);
+  if (query.genre) params.set('genre', query.genre);
+  params.set('page', String(query.page ?? 1));
+  params.set('limit', String(query.limit ?? 10));
+  return `/admin/books?${params.toString()}`;
+}
+
+export async function getAdminBooks(
+  query: AdminBookQuery,
+  signal?: AbortSignal,
+): Promise<AdminBookList> {
+  const response = await apiGetResponse<AdminBook[]>(
+    makeQueryPath(query),
+    signal,
+  );
+
+  if (!response.pagination || !response.authors) {
+    throw new ApiRequestError(
+      502,
+      'invalid_response',
+      'Respons server tidak sesuai. Silakan coba lagi.',
+    );
+  }
+
+  return {
+    books: response.data,
+    authors: response.authors,
+    pagination: response.pagination,
+  };
+}
+
+export async function getAdminGenres(
+  signal?: AbortSignal,
+): Promise<AdminGenre[]> {
+  const activeGenres = await apiGet<GenreItem[]>('/genres', signal);
+
+  return activeGenres.map((genre) => ({
+    ...genre,
+    status: 'active' as const,
+  }));
+}
+
+export async function getAdminBook(
+  bookId: string,
+  signal?: AbortSignal,
+): Promise<AdminBook> {
+  const response = await apiGetResponse<AdminBook>(
+    `/books/${encodeURIComponent(bookId)}`,
+    signal,
+  );
+  return response.data;
+}
+
+export async function createAdminBook(
+  formData: FormData,
+): Promise<{ id: string; message: string }> {
+  const response = await apiPostForm<{ id: string }>('/admin/books', formData);
+  return {
+    id: response.data.id,
+    message: response.message ?? 'Buku berhasil ditambahkan',
+  };
+}
+
+export async function updateAdminBook(
+  bookId: string,
+  formData: FormData,
+): Promise<{ id: string; message: string }> {
+  const response = await apiPatchForm<{ id: string }>(
+    `/admin/books/${bookId}`,
+    formData,
+  );
+  return {
+    id: response.data.id,
+    message: response.message ?? 'Buku berhasil diubah',
+  };
+}
+
+export async function deleteAdminBook(
+  bookId: string,
+): Promise<{ id: string; message: string }> {
+  const response = await apiDelete<{ id: string }>(`/admin/books/${bookId}`);
+  return {
+    id: response.data.id,
+    message: response.message ?? 'Buku berhasil dihapus',
+  };
+}
+
+export function getCoverValidationMessage(
+  file: Pick<File, 'name' | 'type' | 'size'>,
+): string | null {
+  const extension = file.name.includes('.')
+    ? `.${file.name.split('.').pop()?.toLocaleLowerCase('en-US') ?? ''}`
+    : '';
+  const allowedExtensions: readonly string[] = ALLOWED_COVER_EXTENSIONS;
+  const allowedMimeTypes: readonly string[] = ALLOWED_COVER_MIME_TYPES;
+  const mimeType = file.type.toLocaleLowerCase('en-US');
+
+  if (
+    !allowedExtensions.includes(extension) ||
+    (mimeType.length > 0 && !allowedMimeTypes.includes(mimeType))
+  ) {
+    return 'Format file cover buku tidak sesuai';
+  }
+
+  if (file.size > MAX_COVER_SIZE_BYTES) {
+    return 'Ukuran file cover buku tidak boleh lebih dari 5Mb';
+  }
+
+  return null;
+}
+
+export function getGenreIdsForSubmit(
+  selectedGenreId: string,
+  originalGenres: BookGenre[],
+): string[] {
+  const originalGenreIds = originalGenres.map((genre) => genre.id);
+  const originalSelectedId = originalGenreIds[0] ?? '';
+
+  if (selectedGenreId && selectedGenreId === originalSelectedId) {
+    return originalGenreIds;
+  }
+
+  return selectedGenreId ? [selectedGenreId] : [];
+}
+
+// API katalog buku dari branch dev (Home dan Book Detail).
 export const getBooks = (
   filters: { q: string; author: string; genre: string; page: number },
   signal?: AbortSignal,
@@ -11,6 +198,7 @@ export const getBooks = (
     catalogSchema,
     signal ? { signal } : {},
   );
+
 export const getBook = async (id: string) =>
   (
     await request(

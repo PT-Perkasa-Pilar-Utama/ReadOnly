@@ -6,16 +6,21 @@ import {
   Outlet,
   redirect,
 } from '@tanstack/solid-router';
+import { AdminFeedback } from './components/AdminFeedback';
 import AppLayout from './components/AppLayout';
 import { ErrorNotice, Loading, ToastRegion } from './components/Feedback';
 import { loadSession } from './lib/session';
 import BookDetailPage from './pages/BookDetail';
-import DashboardPage from './pages/Dashboard';
+import { DashboardPage as AdminDashboardPage } from './pages/Dashboard/DashboardPage';
 import HomePage from './pages/Home';
+import { LoanDetailPage } from './pages/LoanManagement/LoanDetailPage';
+import { LoanManagementPage } from './pages/LoanManagement/LoanManagementPage';
 import LoginPage from './pages/Login';
 import UsersPage from './pages/ManagementUsers';
 import AddAdminPage from './pages/ManagementUsers/AddAdmin';
 import EditUserPage from './pages/ManagementUsers/EditUser';
+import { BookFormPage } from './pages/MasterBooks/BookFormPage';
+import { MasterBooksPage } from './pages/MasterBooks/MasterBooksPage';
 import GenresPage from './pages/PilihGenre';
 import RegisterPage from './pages/RegisterStep1';
 import {
@@ -28,6 +33,7 @@ const root = createRootRoute({
     <>
       <Outlet />
       <ToastRegion />
+      <AdminFeedback />
     </>
   ),
   notFoundComponent: () => (
@@ -116,11 +122,63 @@ const admin = createRoute({
   },
   component: Outlet,
 });
-const dashboard = createRoute({
-  getParentRoute: () => admin,
-  path: '/dashboard',
-  component: DashboardPage,
+// Halaman Admin US-04/05/06 memakai AdminHeader sendiri, sehingga tidak
+// ditempatkan di dalam AppLayout agar header tidak tampil dua kali.
+const adminArea = createRoute({
+  getParentRoute: () => root,
+  id: 'adminArea',
+  beforeLoad: async () => {
+    const user = await loadSession();
+    if (!user) throw redirect({ to: '/login', replace: true });
+    if (user.role !== 'admin') {
+      throw redirect({ to: '/forbidden', replace: true });
+    }
+    return { user };
+  },
+  component: Outlet,
 });
+
+const adminDashboard = createRoute({
+  getParentRoute: () => adminArea,
+  path: '/dashboard',
+  component: AdminDashboardPage,
+});
+const adminBooks = createRoute({
+  getParentRoute: () => adminArea,
+  path: '/admin/books',
+  component: MasterBooksPage,
+});
+const addBook = createRoute({
+  getParentRoute: () => adminArea,
+  path: '/admin/books/new',
+  component: () => <BookFormPage mode="create" />,
+});
+const editBook = createRoute({
+  getParentRoute: () => adminArea,
+  path: '/admin/books/$bookId/edit',
+  component: EditBookRouteComponent,
+});
+const adminLoans = createRoute({
+  getParentRoute: () => adminArea,
+  path: '/admin/loans',
+  component: LoanManagementPage,
+});
+const adminLoanDetail = createRoute({
+  getParentRoute: () => adminArea,
+  path: '/admin/loans/$loanId',
+  component: AdminLoanDetailRouteComponent,
+});
+
+function EditBookRouteComponent() {
+  const params = editBook.useParams();
+  return <BookFormPage mode="edit" bookId={params().bookId} />;
+}
+
+function AdminLoanDetailRouteComponent() {
+  const params = adminLoanDetail.useParams();
+  return <LoanDetailPage loanId={params().loanId} />;
+}
+
 const users = createRoute({
   getParentRoute: () => admin,
   path: '/admin/users',
@@ -159,7 +217,15 @@ export const router = createRouter({
       home,
       book,
       forbidden,
-      admin.addChildren([dashboard, users.addChildren([addUser, editUser])]),
+      admin.addChildren([users.addChildren([addUser, editUser])]),
+    ]),
+    adminArea.addChildren([
+      adminDashboard,
+      adminBooks,
+      addBook,
+      editBook,
+      adminLoans,
+      adminLoanDetail,
     ]),
   ]),
   defaultPendingComponent: Loading,
