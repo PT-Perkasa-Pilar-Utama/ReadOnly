@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { Buffer } from 'node:buffer';
 import { type Database, QA_IDS } from '@readonly/db';
+import { API_MESSAGES } from '@readonly/shared';
 import { createApp } from '../../app';
 import { MemoryStorageAdapter } from '../../ports/storage';
 import {
@@ -105,6 +106,44 @@ function createTestHarness(
     getAdminHeaders,
     getMemberHeaders,
   };
+}
+
+async function getAdminSessionCookie(
+  app: ReturnType<typeof createApp>,
+): Promise<string> {
+  const loginRes = await app.handle(
+    new Request('http://localhost/api/v1/auth/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        email: 'admin@readonly.ppu.co.id',
+        password: 'password123',
+      }),
+    }),
+  );
+  expect(loginRes.status).toBe(200);
+  const cookie = loginRes.headers.get('set-cookie') ?? '';
+  expect(cookie).toContain('readonly_session=');
+  return cookie;
+}
+
+async function getMemberSessionCookie(
+  app: ReturnType<typeof createApp>,
+): Promise<string> {
+  const loginRes = await app.handle(
+    new Request('http://localhost/api/v1/auth/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        email: 'newmember@gmail.com',
+        password: 'password',
+      }),
+    }),
+  );
+  expect(loginRes.status).toBe(200);
+  const cookie = loginRes.headers.get('set-cookie') ?? '';
+  expect(cookie).toContain('readonly_session=');
+  return cookie;
 }
 
 describe('books module - GET /api/v1/genres', () => {
@@ -1112,5 +1151,709 @@ describe('Master Buku CRUD (BE-S1-03)', () => {
     expect(res.status).toBe(500);
     expect(detachCalled).toBe(true);
     expect(uploadedFile).not.toBeNull();
+  });
+});
+
+describe('books module - Master Genre CRUD & status (BE-S1-04 / US-11)', () => {
+  it('enforces RBAC on Master Genre admin endpoints (SEC-02, SEC-05)', async () => {
+    const app = createApp();
+    const memberCookie = await getMemberSessionCookie(app);
+
+    // 401 unauthenticated
+    const unauthGet = await app.handle(
+      new Request('http://localhost/api/v1/admin/genres'),
+    );
+    expect(unauthGet.status).toBe(401);
+    expect((await unauthGet.json()).code).toBe('session_not_found');
+
+    const unauthPost = await app.handle(
+      new Request('http://localhost/api/v1/admin/genres', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name: 'Komik' }),
+      }),
+    );
+    expect(unauthPost.status).toBe(401);
+
+    // 403 forbidden for member
+    const memberGet = await app.handle(
+      new Request('http://localhost/api/v1/admin/genres', {
+        headers: { cookie: memberCookie },
+      }),
+    );
+    expect(memberGet.status).toBe(403);
+    expect((await memberGet.json()).code).toBe('forbidden');
+
+    const memberPost = await app.handle(
+      new Request('http://localhost/api/v1/admin/genres', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          cookie: memberCookie,
+        },
+        body: JSON.stringify({ name: 'Komik' }),
+      }),
+    );
+    expect(memberPost.status).toBe(403);
+
+    const memberPatch = await app.handle(
+      new Request(
+        `http://localhost/api/v1/admin/genres/${QA_IDS.genres.fiksi}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'content-type': 'application/json',
+            cookie: memberCookie,
+          },
+          body: JSON.stringify({ name: 'Fiksi Baru' }),
+        },
+      ),
+    );
+    expect(memberPatch.status).toBe(403);
+
+    const memberDelete = await app.handle(
+      new Request(
+        `http://localhost/api/v1/admin/genres/${QA_IDS.genres.unused}`,
+        {
+          method: 'DELETE',
+          headers: { cookie: memberCookie },
+        },
+      ),
+    );
+    expect(memberDelete.status).toBe(403);
+  });
+
+  it('AC-11.01: lists all genres with book_count, status, and pagination for admin', async () => {
+    const app = createApp();
+    const adminCookie = await getAdminSessionCookie(app);
+
+    const response = await app.handle(
+      new Request('http://localhost/api/v1/admin/genres?page=1&limit=10', {
+        headers: { cookie: adminCookie },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      data: Array<{
+        id: string;
+        name: string;
+        status: string;
+        book_count: number;
+      }>;
+      pagination: {
+        page: number;
+        limit: number;
+        total: number;
+        totalPages: number;
+      };
+    };
+
+    expect(body.pagination.page).toBe(1);
+    expect(body.pagination.limit).toBe(10);
+    expect(body.pagination.total).toBe(7);
+    expect(body.pagination.totalPages).toBe(1);
+    expect(body.data.length).toBe(7);
+
+    // Sorted alphabetically: Bisnis, Ensiklopedia Lama, Fiksi, Puisi Klasik, Sains, Sejarah, Teknologi
+    expect(body.data[0]?.name).toBe('Bisnis');
+    expect(body.data[0]?.status).toBe('active');
+    expect(body.data[0]?.book_count).toBe(1);
+
+    const fiksi = body.data.find((g) => g.id === QA_IDS.genres.fiksi);
+    expect(fiksi).toBeDefined();
+    expect(fiksi?.book_count).toBe(2);
+
+    const unused = body.data.find((g) => g.id === QA_IDS.genres.unused);
+    expect(unused).toBeDefined();
+    expect(unused?.book_count).toBe(0);
+    expect(unused?.status).toBe('active');
+  });
+
+  it('AC-11.10: filters genres by name substring ignoring case and handles empty results', async () => {
+    const app = createApp();
+    const adminCookie = await getAdminSessionCookie(app);
+
+    // Search case-insensitive 'tekno'
+    const searchRes = await app.handle(
+      new Request('http://localhost/api/v1/admin/genres?q=TEKNO', {
+        headers: { cookie: adminCookie },
+      }),
+    );
+    expect(searchRes.status).toBe(200);
+    const searchBody = (await searchRes.json()) as {
+      data: Array<{ name: string }>;
+      pagination: { total: number };
+    };
+    expect(searchBody.data.length).toBe(1);
+    expect(searchBody.data[0]?.name).toBe('Teknologi');
+    expect(searchBody.pagination.total).toBe(1);
+
+    // Empty search result returns 200 with empty array
+    const emptyRes = await app.handle(
+      new Request('http://localhost/api/v1/admin/genres?q=tidakada', {
+        headers: { cookie: adminCookie },
+      }),
+    );
+    expect(emptyRes.status).toBe(200);
+    const emptyBody = (await emptyRes.json()) as {
+      data: Array<unknown>;
+      pagination: { total: number; totalPages: number };
+    };
+    expect(emptyBody.data).toEqual([]);
+    expect(emptyBody.pagination.total).toBe(0);
+    expect(emptyBody.pagination.totalPages).toBe(0);
+  });
+
+  it('rejects invalid query parameters with 422 invalid_request', async () => {
+    const app = createApp();
+    const adminCookie = await getAdminSessionCookie(app);
+
+    const invalidPage = await app.handle(
+      new Request('http://localhost/api/v1/admin/genres?page=0', {
+        headers: { cookie: adminCookie },
+      }),
+    );
+    expect(invalidPage.status).toBe(422);
+
+    const invalidLimit = await app.handle(
+      new Request('http://localhost/api/v1/admin/genres?limit=100', {
+        headers: { cookie: adminCookie },
+      }),
+    );
+    expect(invalidLimit.status).toBe(422);
+  });
+
+  it('AC-11.02: adds a new active genre with trimmed name and makes it available', async () => {
+    const app = createApp();
+    const adminCookie = await getAdminSessionCookie(app);
+
+    const response = await app.handle(
+      new Request('http://localhost/api/v1/admin/genres', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          cookie: adminCookie,
+        },
+        body: JSON.stringify({ name: '  Komik Strip  ' }),
+      }),
+    );
+
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as {
+      data: { id: string; name: string; status: string };
+      message: string;
+    };
+    expect(body.message).toBe(API_MESSAGES.GENRE_CREATED);
+    expect(body.data.name).toBe('Komik Strip');
+    expect(body.data.status).toBe('active');
+    expect(body.data.id).toBeDefined();
+
+    // Available in public active genres
+    const activeRes = await app.handle(
+      new Request('http://localhost/api/v1/genres'),
+    );
+    const activeBody = (await activeRes.json()) as {
+      data: Array<{ name: string }>;
+    };
+    expect(activeBody.data.some((g) => g.name === 'Komik Strip')).toBe(true);
+  });
+
+  it('AC-11.03: validates mandatory name on create and update with verbatim Field harus diisi!', async () => {
+    const app = createApp();
+    const adminCookie = await getAdminSessionCookie(app);
+
+    // Empty body on create
+    const emptyCreate = await app.handle(
+      new Request('http://localhost/api/v1/admin/genres', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          cookie: adminCookie,
+        },
+        body: JSON.stringify({}),
+      }),
+    );
+    expect(emptyCreate.status).toBe(422);
+    expect(await emptyCreate.json()).toEqual({
+      statusCode: 422,
+      error: 'Unprocessable Entity',
+      code: 'invalid_request',
+      message: API_MESSAGES.FIELD_REQUIRED,
+      data: { field: 'name' },
+    });
+
+    // Whitespace only on create
+    const blankCreate = await app.handle(
+      new Request('http://localhost/api/v1/admin/genres', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          cookie: adminCookie,
+        },
+        body: JSON.stringify({ name: '   ' }),
+      }),
+    );
+    expect(blankCreate.status).toBe(422);
+    expect(await blankCreate.json()).toEqual({
+      statusCode: 422,
+      error: 'Unprocessable Entity',
+      code: 'invalid_request',
+      message: API_MESSAGES.FIELD_REQUIRED,
+      data: { field: 'name' },
+    });
+
+    // Empty body on update
+    const emptyUpdate = await app.handle(
+      new Request(
+        `http://localhost/api/v1/admin/genres/${QA_IDS.genres.fiksi}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'content-type': 'application/json',
+            cookie: adminCookie,
+          },
+          body: JSON.stringify({}),
+        },
+      ),
+    );
+    expect(emptyUpdate.status).toBe(422);
+    expect(await emptyUpdate.json()).toEqual({
+      statusCode: 422,
+      error: 'Unprocessable Entity',
+      code: 'invalid_request',
+      message: API_MESSAGES.FIELD_REQUIRED,
+      data: { field: 'name' },
+    });
+
+    // Whitespace only name on update
+    const blankUpdate = await app.handle(
+      new Request(
+        `http://localhost/api/v1/admin/genres/${QA_IDS.genres.fiksi}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'content-type': 'application/json',
+            cookie: adminCookie,
+          },
+          body: JSON.stringify({ name: '   ' }),
+        },
+      ),
+    );
+    expect(blankUpdate.status).toBe(422);
+    expect(await blankUpdate.json()).toEqual({
+      statusCode: 422,
+      error: 'Unprocessable Entity',
+      code: 'invalid_request',
+      message: API_MESSAGES.FIELD_REQUIRED,
+      data: { field: 'name' },
+    });
+  });
+
+  it('AC-11.04: rejects duplicate genre names case-insensitively with 409 Genre sudah ada', async () => {
+    const app = createApp();
+    const adminCookie = await getAdminSessionCookie(app);
+
+    // Exact duplicate on create
+    const exactDup = await app.handle(
+      new Request('http://localhost/api/v1/admin/genres', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          cookie: adminCookie,
+        },
+        body: JSON.stringify({ name: 'Fiksi' }),
+      }),
+    );
+    expect(exactDup.status).toBe(409);
+    expect(await exactDup.json()).toEqual({
+      statusCode: 409,
+      error: 'Conflict',
+      code: 'conflict',
+      message: API_MESSAGES.GENRE_ALREADY_EXISTS,
+      data: { field: 'name' },
+    });
+
+    // Case-insensitive duplicate with whitespace on create
+    const caseDup = await app.handle(
+      new Request('http://localhost/api/v1/admin/genres', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          cookie: adminCookie,
+        },
+        body: JSON.stringify({ name: '  FIKSI  ' }),
+      }),
+    );
+    expect(caseDup.status).toBe(409);
+    expect(await caseDup.json()).toEqual({
+      statusCode: 409,
+      error: 'Conflict',
+      code: 'conflict',
+      message: API_MESSAGES.GENRE_ALREADY_EXISTS,
+      data: { field: 'name' },
+    });
+
+    // Duplicate on update to another existing genre's name
+    const updateDup = await app.handle(
+      new Request(
+        `http://localhost/api/v1/admin/genres/${QA_IDS.genres.bisnis}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'content-type': 'application/json',
+            cookie: adminCookie,
+          },
+          body: JSON.stringify({ name: 'teknologi' }),
+        },
+      ),
+    );
+    expect(updateDup.status).toBe(409);
+    expect(await updateDup.json()).toEqual({
+      statusCode: 409,
+      error: 'Conflict',
+      code: 'conflict',
+      message: API_MESSAGES.GENRE_ALREADY_EXISTS,
+      data: { field: 'name' },
+    });
+
+    // Updating same genre with its own name should not trigger duplicate conflict
+    const selfUpdate = await app.handle(
+      new Request(
+        `http://localhost/api/v1/admin/genres/${QA_IDS.genres.bisnis}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'content-type': 'application/json',
+            cookie: adminCookie,
+          },
+          body: JSON.stringify({ name: 'Bisnis' }),
+        },
+      ),
+    );
+    expect(selfUpdate.status).toBe(200);
+  });
+
+  it('AC-11.05: updates genre name and returns 200 with Genre berhasil diubah', async () => {
+    const app = createApp();
+    const adminCookie = await getAdminSessionCookie(app);
+
+    const response = await app.handle(
+      new Request(
+        `http://localhost/api/v1/admin/genres/${QA_IDS.genres.fiksi}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'content-type': 'application/json',
+            cookie: adminCookie,
+          },
+          body: JSON.stringify({ name: '  Fiksi Fantasi  ' }),
+        },
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      data: { id: string; name: string; status: string };
+      message: string;
+    };
+    expect(body.message).toBe(API_MESSAGES.GENRE_UPDATED);
+    expect(body.data.name).toBe('Fiksi Fantasi');
+    expect(body.data.id).toBe(QA_IDS.genres.fiksi);
+  });
+
+  it('AC-11.06: deactivates active genre and returns 200 with Genre berhasil dinonaktifkan', async () => {
+    const app = createApp();
+    const adminCookie = await getAdminSessionCookie(app);
+
+    const response = await app.handle(
+      new Request(
+        `http://localhost/api/v1/admin/genres/${QA_IDS.genres.teknologi}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'content-type': 'application/json',
+            cookie: adminCookie,
+          },
+          body: JSON.stringify({ status: 'inactive' }),
+        },
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      data: { id: string; status: string };
+      message: string;
+    };
+    expect(body.message).toBe(API_MESSAGES.GENRE_DEACTIVATED);
+    expect(body.data.status).toBe('inactive');
+
+    // Excluded from public active genres list
+    const activeRes = await app.handle(
+      new Request('http://localhost/api/v1/genres'),
+    );
+    const activeBody = (await activeRes.json()) as {
+      data: Array<{ id: string }>;
+    };
+    expect(activeBody.data.some((g) => g.id === QA_IDS.genres.teknologi)).toBe(
+      false,
+    );
+  });
+
+  it('AC-11.07: reactivates inactive genre and returns 200 with Genre berhasil diaktifkan', async () => {
+    const app = createApp();
+    const adminCookie = await getAdminSessionCookie(app);
+
+    const response = await app.handle(
+      new Request(
+        `http://localhost/api/v1/admin/genres/${QA_IDS.genres.sains}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'content-type': 'application/json',
+            cookie: adminCookie,
+          },
+          body: JSON.stringify({ status: 'active' }),
+        },
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      data: { id: string; status: string };
+      message: string;
+    };
+    expect(body.message).toBe(API_MESSAGES.GENRE_ACTIVATED);
+    expect(body.data.status).toBe('active');
+
+    // Included back into public active genres list
+    const activeRes = await app.handle(
+      new Request('http://localhost/api/v1/genres'),
+    );
+    const activeBody = (await activeRes.json()) as {
+      data: Array<{ id: string }>;
+    };
+    expect(activeBody.data.some((g) => g.id === QA_IDS.genres.sains)).toBe(
+      true,
+    );
+  });
+
+  it('AC-11.08: hard-deletes unused genre and returns 200 with Genre berhasil dihapus', async () => {
+    const app = createApp();
+    const adminCookie = await getAdminSessionCookie(app);
+
+    const response = await app.handle(
+      new Request(
+        `http://localhost/api/v1/admin/genres/${QA_IDS.genres.unused}`,
+        {
+          method: 'DELETE',
+          headers: { cookie: adminCookie },
+        },
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      data: { id: QA_IDS.genres.unused },
+      message: API_MESSAGES.GENRE_DELETED,
+    });
+
+    // Ensure it is completely gone
+    const checkRes = await app.handle(
+      new Request(
+        `http://localhost/api/v1/admin/genres/${QA_IDS.genres.unused}`,
+        {
+          method: 'DELETE',
+          headers: { cookie: adminCookie },
+        },
+      ),
+    );
+    expect(checkRes.status).toBe(404);
+  });
+
+  it('AC-11.09: rejects DELETE for genre used by books with 409 genre_in_use and verbatim AC copy', async () => {
+    const app = createApp();
+    const adminCookie = await getAdminSessionCookie(app);
+
+    // QA_IDS.genres.fiksi is used by bookA, bookG, bookH, bookJ
+    const response = await app.handle(
+      new Request(
+        `http://localhost/api/v1/admin/genres/${QA_IDS.genres.fiksi}`,
+        {
+          method: 'DELETE',
+          headers: { cookie: adminCookie },
+        },
+      ),
+    );
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      statusCode: 409,
+      error: 'Conflict',
+      code: 'genre_in_use',
+      message: API_MESSAGES.GENRE_IN_USE,
+    });
+  });
+
+  it('AC-11.09: rejects DELETE for genre chosen by Member preference with 409 genre_in_use', async () => {
+    // Custom repository where genre is chosen by user preference but has 0 books
+    const customRepo = new InMemoryBooksRepository(
+      [
+        {
+          id: '11111111-0000-4000-8001-000000000001',
+          name: 'Novel Grafis',
+          status: 'active',
+          createdAt: new Date(),
+        },
+      ],
+      [], // no books
+      [], // no book_genres
+      [], // no loans
+      [], // no ratings
+      [
+        {
+          userId: QA_IDS.users.member1,
+          genreId: '11111111-0000-4000-8001-000000000001',
+        },
+      ],
+    );
+
+    const app = createApp({ booksRepository: customRepo });
+    const adminCookie = await getAdminSessionCookie(app);
+
+    const response = await app.handle(
+      new Request(
+        'http://localhost/api/v1/admin/genres/11111111-0000-4000-8001-000000000001',
+        {
+          method: 'DELETE',
+          headers: { cookie: adminCookie },
+        },
+      ),
+    );
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      statusCode: 409,
+      error: 'Conflict',
+      code: 'genre_in_use',
+      message: API_MESSAGES.GENRE_IN_USE,
+    });
+  });
+
+  it('returns 404 for invalid UUID or non-existent genre on PATCH and DELETE', async () => {
+    const app = createApp();
+    const adminCookie = await getAdminSessionCookie(app);
+
+    const invalidUuidPatch = await app.handle(
+      new Request('http://localhost/api/v1/admin/genres/not-a-uuid', {
+        method: 'PATCH',
+        headers: {
+          'content-type': 'application/json',
+          cookie: adminCookie,
+        },
+        body: JSON.stringify({ name: 'Valid Name' }),
+      }),
+    );
+    expect(invalidUuidPatch.status).toBe(404);
+
+    const notFoundPatch = await app.handle(
+      new Request(
+        'http://localhost/api/v1/admin/genres/00000000-0000-0000-0000-999999999999',
+        {
+          method: 'PATCH',
+          headers: {
+            'content-type': 'application/json',
+            cookie: adminCookie,
+          },
+          body: JSON.stringify({ name: 'Valid Name' }),
+        },
+      ),
+    );
+    expect(notFoundPatch.status).toBe(404);
+
+    const invalidUuidDelete = await app.handle(
+      new Request('http://localhost/api/v1/admin/genres/not-a-uuid', {
+        method: 'DELETE',
+        headers: { cookie: adminCookie },
+      }),
+    );
+    expect(invalidUuidDelete.status).toBe(404);
+
+    const notFoundDelete = await app.handle(
+      new Request(
+        'http://localhost/api/v1/admin/genres/00000000-0000-0000-0000-999999999999',
+        {
+          method: 'DELETE',
+          headers: { cookie: adminCookie },
+        },
+      ),
+    );
+    expect(notFoundDelete.status).toBe(404);
+  });
+
+  it('translates PostgreSQL constraint violations in DrizzleBooksRepository (AC-11.04, AC-11.09)', async () => {
+    const fakeDbUnique = {
+      insert() {
+        return {
+          values() {
+            return {
+              returning() {
+                const error = new Error('duplicate key');
+                (error as unknown as { code: string }).code = '23505';
+                return Promise.reject(error);
+              },
+            };
+          },
+        };
+      },
+      update() {
+        return {
+          set() {
+            return {
+              where() {
+                return {
+                  returning() {
+                    const error = new Error('duplicate key');
+                    (error as unknown as { code: string }).code = '23505';
+                    return Promise.reject(error);
+                  },
+                };
+              },
+            };
+          },
+        };
+      },
+      transaction() {
+        const error = new Error('foreign key constraint');
+        (error as unknown as { code: string }).code = '23503';
+        return Promise.reject(error);
+      },
+    } as unknown as Database;
+
+    const repository = new DrizzleBooksRepository(fakeDbUnique);
+
+    await expect(
+      repository.createGenre({ name: 'Fiksi' }),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'conflict',
+      message: API_MESSAGES.GENRE_ALREADY_EXISTS,
+    });
+
+    await expect(
+      repository.updateGenre(QA_IDS.genres.fiksi, { name: 'Teknologi' }),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'conflict',
+      message: API_MESSAGES.GENRE_ALREADY_EXISTS,
+    });
+
+    await expect(
+      repository.deleteGenre(QA_IDS.genres.fiksi),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'genre_in_use',
+      message: API_MESSAGES.GENRE_IN_USE,
+    });
   });
 });

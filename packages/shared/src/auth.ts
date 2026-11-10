@@ -39,6 +39,14 @@ export const API_MESSAGES = {
   BOOK_DELETE_ACTIVE_LOANS: 'Buku tidak dapat dihapus karena masih dipinjam',
   COVER_INVALID_FORMAT: 'Format file cover buku tidak sesuai',
   COVER_SIZE_LIMIT: 'Ukuran file cover buku tidak boleh lebih dari 5Mb',
+  GENRE_ALREADY_EXISTS: 'Genre sudah ada',
+  GENRE_IN_USE:
+    'Genre tidak dapat dihapus karena masih digunakan. Nonaktifkan genre jika tidak ingin dipakai lagi.',
+  GENRE_CREATED: 'Genre berhasil ditambahkan',
+  GENRE_UPDATED: 'Genre berhasil diubah',
+  GENRE_DEACTIVATED: 'Genre berhasil dinonaktifkan',
+  GENRE_ACTIVATED: 'Genre berhasil diaktifkan',
+  GENRE_DELETED: 'Genre berhasil dihapus',
 } as const;
 
 export const genreItemSchema = z.object({

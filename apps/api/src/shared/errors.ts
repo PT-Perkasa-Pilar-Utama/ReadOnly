@@ -106,6 +106,17 @@ export function createNotFoundError(
   });
 }
 
+export function createGenreInUseError(
+  message: string = API_MESSAGES.GENRE_IN_USE,
+): AppError {
+  return new AppError({
+    statusCode: 409,
+    error: 'Conflict',
+    code: 'genre_in_use',
+    message,
+  });
+}
+
 export function createForbiddenError(
   message: string = API_MESSAGES.FORBIDDEN,
   code = 'forbidden',

@@ -1,25 +1,47 @@
 import {
   type AdminBooksResponse,
+  type AdminGenreItem,
+  type AdminGenresResponse,
   API_MESSAGES,
   adminBooksResponseSchema,
+  adminGenreItemSchema,
+  adminGenresResponseSchema,
   type BookGenreItem,
   type BookMutationResponseData,
   bookGenreItemSchema,
+  type CreateGenreInput,
+  type CreateGenreResponseData,
+  createGenreInputSchema,
+  type DeleteGenreResponseData,
   type GenreItem,
   genreItemSchema,
+  type UpdateGenreInput,
+  type UpdateGenreResponseData,
   UUID_REGEX,
+  updateGenreInputSchema,
 } from '@readonly/shared';
 import { z } from 'zod';
 import { createValidationError } from '../../shared/errors';
 
 export {
   type AdminBooksResponse,
+  type AdminGenreItem,
+  type AdminGenresResponse,
   adminBooksResponseSchema,
+  adminGenreItemSchema,
+  adminGenresResponseSchema,
   type BookGenreItem,
   type BookMutationResponseData,
   bookGenreItemSchema,
+  type CreateGenreInput,
+  type CreateGenreResponseData,
+  createGenreInputSchema,
+  type DeleteGenreResponseData,
   type GenreItem,
   genreItemSchema,
+  type UpdateGenreInput,
+  type UpdateGenreResponseData,
+  updateGenreInputSchema,
 };
 
 export const activeGenresResponseSchema = z.object({
@@ -42,6 +64,39 @@ export const adminBooksQuerySchema = z.object({
 });
 
 export type AdminBooksQuery = z.infer<typeof adminBooksQuerySchema>;
+
+export const adminGenresQuerySchema = z.object({
+  q: z.string().optional(),
+  page: z
+    .preprocess(
+      (val) => {
+        if (val === undefined || val === '') return 1;
+        const num = Number(val);
+        return Number.isNaN(num) ? val : num;
+      },
+      z
+        .number()
+        .int({ message: 'Permintaan tidak valid.' })
+        .min(1, { message: 'Permintaan tidak valid.' }),
+    )
+    .default(1),
+  limit: z
+    .preprocess(
+      (val) => {
+        if (val === undefined || val === '') return 10;
+        const num = Number(val);
+        return Number.isNaN(num) ? val : num;
+      },
+      z
+        .number()
+        .int({ message: 'Permintaan tidak valid.' })
+        .min(1, { message: 'Permintaan tidak valid.' })
+        .max(50, { message: 'Permintaan tidak valid.' }),
+    )
+    .default(10),
+});
+
+export type AdminGenresQuery = z.infer<typeof adminGenresQuerySchema>;
 
 export interface ValidatedBookFormData {
   title: string;
