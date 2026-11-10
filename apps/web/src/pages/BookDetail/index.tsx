@@ -1,17 +1,43 @@
-import { createQuery } from '@tanstack/solid-query';
-import { Link, useParams } from '@tanstack/solid-router';
+import { createQuery, useQueryClient } from '@tanstack/solid-query';
+import { Link, useNavigate, useParams } from '@tanstack/solid-router';
 import { getBook } from '@web/api/books';
+import { createLoan } from '@web/api/loan-workflows';
 import { BookCover } from '@web/components/BookCard';
-import { ErrorNotice, Loading } from '@web/components/Feedback';
+import { ErrorNotice, Loading, notify } from '@web/components/Feedback';
 import Icon from '@web/components/Icon';
-import { For, Show } from 'solid-js';
+import { createSignal, For, Show } from 'solid-js';
 
 export default function BookDetailPage() {
   const params = useParams({ strict: false });
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [submitting, setSubmitting] = createSignal(false);
+
   const book = createQuery(() => ({
     queryKey: ['book', params().bookId],
     queryFn: () => getBook(params().bookId ?? ''),
   }));
+
+  async function submitBorrow(bookId: string) {
+    if (submitting()) return;
+    setSubmitting(true);
+    try {
+      const result = await createLoan(bookId);
+      notify(result.message ?? 'Pengajuan peminjaman berhasil', 'success');
+      await queryClient.invalidateQueries({ queryKey: ['member', 'loans'] });
+      await navigate({ to: '/loans' });
+    } catch (error) {
+      notify(
+        error instanceof Error
+          ? error.message
+          : 'Pengajuan peminjaman gagal. Silakan coba lagi.',
+        'error',
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <main class="page-container">
       <Link to="/home" class="back-link">
@@ -30,7 +56,7 @@ export default function BookDetailPage() {
       <Show when={book.data} keyed>
         {(data) => (
           <article class="detail-card">
-            {/* AC-07.04: seluruh informasi detail ditampilkan sesuai kontrak /books/:id. */}
+            {/* AC-07.04: detail tetap mengikuti kontrak /books/:id. */}
             <BookCover
               class="detail-cover"
               src={data.cover_url}
@@ -65,7 +91,7 @@ export default function BookDetailPage() {
                 <p>{data.synopsis}</p>
               </section>
               <p class="availability-detail">
-                {/* AC-07.04: status dan jumlah buku ditampilkan bersama sesuai Figma. */}
+                {/* AC-07.04: status dan jumlah buku tetap dari API. */}
                 <span>Ketersediaan Buku:</span>
                 <span
                   class={
@@ -80,14 +106,21 @@ export default function BookDetailPage() {
                 <button
                   type="button"
                   class="button"
-                  disabled
-                  aria-describedby="borrow-hint"
+                  disabled={
+                    !data.is_available ||
+                    data.available_count <= 0 ||
+                    submitting()
+                  }
+                  onClick={() => void submitBorrow(data.id)}
                 >
-                  Pinjam <Icon name="arrow" size={16} />
+                  {submitting() ? 'Mengajukan…' : 'Pinjam'}{' '}
+                  <Icon name="arrow" size={16} />
                 </button>
-                <p id="borrow-hint" class="small muted">
-                  Peminjaman belum tersedia.
-                </p>
+                <Show when={!data.is_available || data.available_count <= 0}>
+                  <p class="small muted" id="borrow-hint">
+                    Buku tidak tersedia.
+                  </p>
+                </Show>
               </div>
             </div>
           </article>

@@ -21,6 +21,8 @@ import AddAdminPage from './pages/ManagementUsers/AddAdmin';
 import EditUserPage from './pages/ManagementUsers/EditUser';
 import { BookFormPage } from './pages/MasterBooks/BookFormPage';
 import { MasterBooksPage } from './pages/MasterBooks/MasterBooksPage';
+import MasterGenresPage from './pages/MasterGenres/MasterGenresPage';
+import MyLoansPage from './pages/MyLoans';
 import GenresPage from './pages/PilihGenre';
 import RegisterPage from './pages/RegisterStep1';
 import {
@@ -113,6 +115,15 @@ const book = createRoute({
   path: '/books/$bookId',
   component: BookDetailPage,
 });
+const memberLoans = createRoute({
+  getParentRoute: () => authenticated,
+  path: '/loans',
+  beforeLoad: ({ context }) => {
+    if (context.user.role !== 'member')
+      throw redirect({ to: '/dashboard', replace: true });
+  },
+  component: MyLoansPage,
+});
 const admin = createRoute({
   getParentRoute: () => authenticated,
   id: 'admin',
@@ -168,6 +179,11 @@ const adminLoanDetail = createRoute({
   path: '/admin/loans/$loanId',
   component: AdminLoanDetailRouteComponent,
 });
+const adminGenres = createRoute({
+  getParentRoute: () => adminArea,
+  path: '/admin/genres',
+  component: MasterGenresPage,
+});
 
 function EditBookRouteComponent() {
   const params = editBook.useParams();
@@ -216,6 +232,7 @@ export const router = createRouter({
     authenticated.addChildren([
       home,
       book,
+      memberLoans,
       forbidden,
       admin.addChildren([users.addChildren([addUser, editUser])]),
     ]),
@@ -226,6 +243,7 @@ export const router = createRouter({
       editBook,
       adminLoans,
       adminLoanDetail,
+      adminGenres,
     ]),
   ]),
   defaultPendingComponent: Loading,

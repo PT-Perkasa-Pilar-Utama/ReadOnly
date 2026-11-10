@@ -54,13 +54,9 @@ export default function AppLayout() {
               <Link to="/home" activeProps={{ class: 'active' }}>
                 Home
               </Link>
-              <span
-                class="nav-disabled"
-                aria-disabled="true"
-                title="Pinjaman belum tersedia"
-              >
+              <Link to="/loans" activeProps={{ class: 'active' }}>
                 Pinjaman
-              </span>
+              </Link>
             </Show>
           </nav>
           <div class="header-account">
