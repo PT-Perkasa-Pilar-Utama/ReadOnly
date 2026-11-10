@@ -664,7 +664,6 @@ input[readonly] {
   border-radius: 20px;
   white-space: nowrap;
 }
-.catalog-toolbar,
 .user-toolbar {
   display: flex;
   align-items: center;
@@ -685,33 +684,23 @@ input[readonly] {
   padding-left: 42px;
   height: 45px;
 }
-.filter-count {
-  background: var(--wine);
-  color: #fff;
-  border-radius: 20px;
-  min-width: 19px;
-  height: 19px;
+.catalog-filters {
   display: grid;
-  place-items: center;
-  font-size: 10px;
-}
-.filter-panel {
-  padding: 18px 20px;
-  background: #f0e8de;
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 230px) minmax(
+      150px,
+      230px
+    ) auto;
+  align-items: end;
+  gap: 12px;
   margin-bottom: 22px;
-  display: flex;
-  align-items: flex-end;
-  gap: 14px;
 }
-.filter-panel .field {
-  flex: 1;
+.catalog-filters .field {
+  min-width: 0;
   margin: 0;
 }
-.filter-panel .text-button {
-  min-height: 42px;
-  padding: 8px;
+.catalog-filters input,
+.catalog-filters select {
+  width: 100%;
 }
 .pagination-row {
   display: flex;
@@ -813,12 +802,16 @@ input[readonly] {
 }
 .availability-detail {
   display: flex;
-  gap: 18px;
+  flex-wrap: wrap;
+  gap: 6px;
   font-size: 12px;
   padding-top: 12px;
 }
-.availability-detail span {
+.availability-detail .available-text {
   color: var(--green);
+}
+.availability-detail .unavailable-text {
+  color: var(--red);
 }
 .borrow-integration {
   display: flex;
@@ -902,23 +895,6 @@ tbody tr:hover {
 .status-action:hover:not(:disabled) {
   background: #f4e8ea;
 }
-.user-form-card {
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 32px;
-  display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(320px, 2fr);
-  gap: 50px;
-}
-.user-form-card form {
-  max-width: 700px;
-}
-.user-form-summary {
-  padding: 25px 20px;
-  border-right: 1px solid var(--line);
-  text-align: center;
-}
 .summary-icon {
   width: 68px;
   height: 68px;
@@ -928,14 +904,6 @@ tbody tr:hover {
   color: var(--wine);
   border-radius: 50%;
   margin-bottom: 20px;
-}
-.user-form-summary h2 {
-  font-size: 25px;
-  overflow-wrap: anywhere;
-}
-.user-form-summary p {
-  font-size: 12px;
-  color: var(--muted);
 }
 .form-actions {
   display: flex;
@@ -968,6 +936,24 @@ tbody tr:hover {
 .modal-header h2 {
   font-size: 24px;
   margin: 0;
+  flex: 1;
+}
+.modal-warning {
+  display: inline-flex;
+  color: #a77f35;
+}
+.user-form-modal {
+  width: min(560px, calc(100vw - 32px));
+  padding: 24px;
+}
+.user-form-modal::backdrop {
+  backdrop-filter: blur(3px);
+}
+.user-form-modal .field {
+  margin-bottom: 14px;
+}
+.user-form-modal .form-actions {
+  margin-top: 12px;
 }
 .confirmation-copy {
   font-size: 13px;
@@ -1070,10 +1056,10 @@ tbody tr:hover {
 }
 .toast-region {
   position: fixed;
-  top: 45px;
+  top: var(--feedback-top, 24px);
   left: 50%;
   transform: translateX(-50%);
-  width: min(480px, calc(100vw - 32px));
+  width: min(960px, 67vw);
   z-index: 100;
   pointer-events: none;
 }
@@ -1082,9 +1068,8 @@ tbody tr:hover {
   align-items: center;
   gap: 12px;
   background: #fff;
-  padding: 12px 14px;
+  padding: 14px 18px;
   border: 1px solid var(--line);
-  box-shadow: 0 6px 30px #3f2b2d1a;
   border-radius: 8px;
   font-size: 12px;
   pointer-events: auto;
@@ -1098,8 +1083,8 @@ tbody tr:hover {
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: #dfede6;
-  color: var(--green);
+  background: var(--green);
+  color: #fff;
 }
 .toast.error .toast-icon {
   background: #f6e3e8;
@@ -1110,16 +1095,16 @@ tbody tr:hover {
 }
 .notification-panel {
   position: absolute;
-  width: 375px;
-  right: -25px;
-  top: 50px;
+  width: 470px;
+  right: 0;
+  top: calc(100% + 28px);
   z-index: 30;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: #fff;
   color: #302a2b;
   box-shadow: 0 10px 40px #3a1b2c20;
-  padding: 16px;
+  padding: 24px 26px;
   max-height: min(650px, calc(100dvh - 180px));
   overflow-y: auto;
 }
@@ -1130,7 +1115,9 @@ tbody tr:hover {
   gap: 12px;
 }
 .notification-panel h2 {
-  font-size: 23px;
+  font-family: 'Raleway', Arial, sans-serif;
+  font-size: 20px;
+  font-weight: 500;
   margin: 0;
 }
 .notification-list {
@@ -1148,32 +1135,29 @@ tbody tr:hover {
   border-top: 0;
 }
 .notification-list h3 {
-  font-size: 11px;
+  font-size: 13px;
   margin-bottom: 5px;
   line-height: 1.55;
 }
 .notification-list p {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   margin-bottom: 5px;
 }
 .notification-list time {
-  font-size: 9px;
-  color: #948b87;
+  font-size: 11px;
+  color: var(--muted);
 }
-.notification-type {
-  width: 30px;
-  height: 34px;
+.notification-cover {
+  width: 44px;
+  height: 62px;
   flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  border-radius: 4px;
-  background: #f3ead9;
-  color: #927142;
+  border-radius: 2px;
 }
-.notification-type.overdue {
-  background: #f4e3e7;
-  color: var(--red);
+.notification-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 .notification-panel .pagination-row {
   font-size: 9px;
@@ -1186,41 +1170,40 @@ tbody tr:hover {
 }
 .reminder-popup {
   position: fixed;
-  bottom: 25px;
-  right: 28px;
+  top: var(--feedback-top, 24px);
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 40;
-  width: min(410px, calc(100vw - 32px));
+  width: min(960px, 67vw);
+  max-height: calc(100dvh - 160px);
+  overflow-y: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 18px;
   background: #fff;
   border: 1px solid var(--line);
-  border-radius: 10px;
-  box-shadow: 0 10px 50px #3a1b2c26;
-  overflow: hidden;
+  border-radius: 8px;
 }
-.reminder-popup header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 13px 15px;
-  border-bottom: 1px solid #eee5dd;
+:root:has(.demo-banner) {
+  --feedback-top: 54px;
 }
-.reminder-popup h2 {
-  font-family: 'Raleway', Arial, sans-serif;
-  font-size: 12px;
-  margin: 0;
-  flex: 1;
+body:has(.toast) .reminder-popup {
+  top: calc(var(--feedback-top, 24px) + 72px);
 }
 .reminder-symbol {
   color: #a77f35;
+  margin-top: 4px;
 }
 .reminder-symbol.overdue {
   color: var(--red);
 }
 .reminder-books {
-  padding: 2px 17px;
+  flex: 1;
+  min-width: 0;
 }
 .reminder-books > div {
-  padding: 12px 0;
-  border-bottom: 1px solid #f0e8e3;
+  padding: 4px 0;
 }
 .reminder-books > div:last-child {
   border: 0;
@@ -1233,20 +1216,6 @@ tbody tr:hover {
 .reminder-books span {
   font-size: 11px;
   color: var(--muted);
-}
-.reminder-progress {
-  height: 3px;
-  background: #a55d6b;
-  transform-origin: left;
-  animation: reminder-countdown linear forwards;
-}
-@keyframes reminder-countdown {
-  from {
-    transform: scaleX(1);
-  }
-  to {
-    transform: scaleX(0);
-  }
 }
 .reminder-error {
   position: fixed;
@@ -1340,19 +1309,14 @@ tbody tr:hover {
     gap: 23px;
     padding: 23px;
   }
-  .user-form-card {
-    grid-template-columns: 1fr;
-    gap: 10px;
-    padding: 25px;
+  .catalog-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .user-form-summary {
-    display: none;
+  .catalog-search {
+    grid-column: 1 / -1;
   }
-  .user-form-card form {
-    max-width: none;
-  }
-  .notification-panel {
-    right: -170px;
+  .catalog-filters .button {
+    grid-column: 1 / -1;
   }
 }
 @media (max-width: 600px) {
@@ -1512,10 +1476,10 @@ tbody tr:hover {
   .all-books {
     margin-top: 28px;
   }
-  .catalog-toolbar {
+  .catalog-filters {
     gap: 9px;
   }
-  .catalog-toolbar .button {
+  .catalog-filters .button {
     padding: 10px 12px;
     font-size: 11px;
   }
@@ -1525,17 +1489,6 @@ tbody tr:hover {
   }
   .search-field > svg {
     left: 11px;
-  }
-  .filter-panel {
-    flex-wrap: wrap;
-    gap: 12px;
-    padding: 15px;
-  }
-  .filter-panel .field {
-    flex-basis: calc(50% - 12px);
-  }
-  .filter-panel .button {
-    flex: 1;
   }
   .pagination-row {
     flex-wrap: wrap;
@@ -1586,9 +1539,6 @@ tbody tr:hover {
   .role-filter select {
     flex: 1;
   }
-  .user-form-card {
-    padding: 20px;
-  }
   .row-actions {
     gap: 4px;
   }
@@ -1617,11 +1567,10 @@ tbody tr:hover {
     max-height: calc(100dvh - 155px);
   }
   .reminder-popup {
-    right: 16px;
-    bottom: 16px;
+    width: calc(100vw - 24px);
   }
   .toast-region {
-    top: 45px;
+    width: calc(100vw - 24px);
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1632,9 +1581,6 @@ tbody tr:hover {
     transition: none !important;
   }
   .spinner {
-    animation: none;
-  }
-  .reminder-progress {
     animation: none;
   }
 }

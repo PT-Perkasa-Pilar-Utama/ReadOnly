@@ -1,6 +1,6 @@
 import { USER_ROLE_LABELS, USER_STATUS_LABELS } from '@readonly/shared';
 import { createQuery } from '@tanstack/solid-query';
-import { Link } from '@tanstack/solid-router';
+import { Link, Outlet } from '@tanstack/solid-router';
 import type { User } from '@web/api/contracts';
 import { getUsers, setUserStatus } from '@web/api/users';
 import { ErrorNotice, Loading, notify } from '@web/components/Feedback';
@@ -200,6 +200,7 @@ export default function UsersPage() {
         {(user) => (
           <Modal
             title="Nonaktifkan akun"
+            warning
             onClose={() => {
               if (!busy()) setConfirm(null);
             }}
@@ -228,6 +229,8 @@ export default function UsersPage() {
           </Modal>
         )}
       </Show>
+      {/* AC-12.02, AC-12.05: modal tambah/edit tampil di atas daftar dan mempertahankan filter. */}
+      <Outlet />
     </main>
   );
 }

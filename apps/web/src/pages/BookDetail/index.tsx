@@ -37,11 +37,6 @@ export default function BookDetailPage() {
               title={data.title}
             />
             <div class="detail-content">
-              <span
-                class={`badge ${data.is_available ? 'available' : 'unavailable'}`}
-              >
-                {data.availability_label}
-              </span>
               <h2>{data.title}</h2>
               <dl class="book-facts">
                 <div>
@@ -70,8 +65,16 @@ export default function BookDetailPage() {
                 <p>{data.synopsis}</p>
               </section>
               <p class="availability-detail">
-                <strong>Ketersediaan Buku</strong>
-                <span>{data.available_count} tersedia</span>
+                {/* AC-07.04: status dan jumlah buku ditampilkan bersama sesuai Figma. */}
+                <span>Ketersediaan Buku:</span>
+                <span
+                  class={
+                    data.is_available ? 'available-text' : 'unavailable-text'
+                  }
+                >
+                  {data.availability_label}
+                </span>
+                <span class="muted">({data.available_count} buku)</span>
               </p>
               <div class="borrow-integration">
                 <button

@@ -125,7 +125,7 @@ export default function RegisterPage() {
           {busy() ? 'Memproses…' : 'Next'}
         </button>
         <p class="auth-switch">
-          Sudah punya akun? <a href="/login">Login</a>
+          Sudah punya akun? <a href="/login">Log In disini</a>
         </p>
       </form>
     </AuthLayout>

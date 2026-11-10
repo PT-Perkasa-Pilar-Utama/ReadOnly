@@ -82,7 +82,8 @@ export default function LoginPage() {
           {busy() ? 'Memproses…' : 'Login'}
         </button>
         <p class="auth-switch">
-          Belum punya akun? <a href="/register">Sign Up</a>
+          {/* AC-01.01: tautan register mengikuti copy pada desain Figma. */}
+          Belum punya akun? <a href="/register">Sign Up disini</a>
         </p>
       </form>
       <Show when={isDemo}>

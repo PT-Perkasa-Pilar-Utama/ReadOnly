@@ -5,9 +5,11 @@ import {
 import { createQuery } from '@tanstack/solid-query';
 import { useLocation } from '@tanstack/solid-router';
 import { createEffect, createSignal, For, onCleanup, Show } from 'solid-js';
-import type { Popup } from '../api/contracts';
+import { catalogSchema, type Popup } from '../api/contracts';
 import { getNotifications } from '../api/notifications';
+import { queryClient } from '../lib/query';
 import { consumeLoginReminders, hasLoginReminders } from '../lib/session';
+import { BookCover } from './BookCard';
 import { ErrorNotice, Loading } from './Feedback';
 import Icon from './Icon';
 import Pagination from './Pagination';
@@ -21,6 +23,20 @@ export function NotificationsMenu() {
     enabled: open(),
   }));
   let wrapper!: HTMLDivElement;
+  // AC-10.01–AC-10.03: gunakan cover katalog yang sudah dimuat; kontrak notifikasi belum menyertakan cover.
+  function coverFor(title: string) {
+    for (const [, cached] of queryClient.getQueriesData({
+      queryKey: ['books'],
+    })) {
+      const catalog = catalogSchema.safeParse(cached);
+      if (!catalog.success) continue;
+      const book = [...catalog.data.data, ...catalog.data.recommendations].find(
+        (item) => item.title === title,
+      );
+      if (book) return book.cover_url;
+    }
+    return undefined;
+  }
   createEffect(() => {
     if (!open()) return;
     const closeOutside = (event: PointerEvent) => {
@@ -90,16 +106,25 @@ export function NotificationsMenu() {
                     <For each={data.data}>
                       {(item) => (
                         <li>
-                          <span
-                            class={`notification-type ${item.type.toLowerCase()}`}
+                          <Show
+                            when={coverFor(item.book_title)}
+                            fallback={
+                              <span
+                                class="notification-cover cover-fallback"
+                                aria-hidden="true"
+                              >
+                                <Icon name="book" size={22} />
+                              </span>
+                            }
                           >
-                            <Icon
-                              name={
-                                item.type === 'OVERDUE' ? 'warning' : 'book'
-                              }
-                              size={18}
-                            />
-                          </span>
+                            {(src) => (
+                              <BookCover
+                                class="notification-cover"
+                                src={src()}
+                                title={item.book_title}
+                              />
+                            )}
+                          </Show>
                           <div>
                             <h3>{item.title}</h3>
                             <Show when={item.text}>
@@ -109,6 +134,8 @@ export function NotificationsMenu() {
                               {new Intl.DateTimeFormat('id-ID', {
                                 day: 'numeric',
                                 month: 'short',
+                                hour: '2-digit',
+                                minute: '2-digit',
                                 timeZone: 'Asia/Jakarta',
                               }).format(new Date(item.created_at))}
                             </time>
@@ -118,11 +145,13 @@ export function NotificationsMenu() {
                     </For>
                   </ul>
                 </Show>
-                <Pagination
-                  pagination={data.pagination}
-                  noun="notifikasi"
-                  onChange={setPage}
-                />
+                <Show when={data.pagination.totalPages > 1}>
+                  <Pagination
+                    pagination={data.pagination}
+                    noun="notifikasi"
+                    onChange={setPage}
+                  />
+                </Show>
               </>
             )}
           </Show>
@@ -180,24 +209,12 @@ export function ReminderHost() {
             aria-atomic="true"
             aria-label="Pengingat peminjaman"
           >
-            <header>
-              <span class={`reminder-symbol ${popup.condition.toLowerCase()}`}>
-                <Icon
-                  name={popup.condition === 'OVERDUE' ? 'warning' : 'bell'}
-                  size={19}
-                />
-              </span>
-              <h2>Pengingat peminjaman</h2>
-              {/* PDF AC-10.07 = repo AC-10.08: X melanjutkan antrean tanpa menghapus notifikasi. */}
-              <button
-                type="button"
-                class="icon-button"
-                aria-label="Tutup pengingat"
-                onClick={next}
-              >
-                <Icon name="close" size={18} />
-              </button>
-            </header>
+            <span class={`reminder-symbol ${popup.condition.toLowerCase()}`}>
+              <Icon
+                name={popup.condition === 'OVERDUE' ? 'warning' : 'bell'}
+                size={19}
+              />
+            </span>
             <div class="reminder-books">
               <For each={popup.books}>
                 {(book) => (
@@ -218,10 +235,15 @@ export function ReminderHost() {
                 )}
               </For>
             </div>
-            <div
-              class="reminder-progress"
-              style={{ 'animation-duration': `${LOGIN_POPUP_DURATION_MS}ms` }}
-            />
+            {/* PDF AC-10.07 = repo AC-10.08: X melanjutkan antrean tanpa menghapus notifikasi. */}
+            <button
+              type="button"
+              class="icon-button"
+              aria-label="Tutup pengingat"
+              onClick={next}
+            >
+              <Icon name="close" size={18} />
+            </button>
           </section>
         )}
       </Show>

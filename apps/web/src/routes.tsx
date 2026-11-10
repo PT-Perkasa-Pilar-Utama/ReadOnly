@@ -185,13 +185,13 @@ const users = createRoute({
   component: UsersPage,
 });
 const addUser = createRoute({
-  getParentRoute: () => admin,
-  path: '/admin/users/add',
+  getParentRoute: () => users,
+  path: '/add',
   component: AddAdminPage,
 });
 const editUser = createRoute({
-  getParentRoute: () => admin,
-  path: '/admin/users/$userId/edit',
+  getParentRoute: () => users,
+  path: '/$userId/edit',
   component: EditUserPage,
 });
 const forbidden = createRoute({
@@ -217,7 +217,7 @@ export const router = createRouter({
       home,
       book,
       forbidden,
-      admin.addChildren([users, addUser, editUser]),
+      admin.addChildren([users.addChildren([addUser, editUser])]),
     ]),
     adminArea.addChildren([
       adminDashboard,

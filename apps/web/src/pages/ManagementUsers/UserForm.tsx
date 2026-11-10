@@ -1,11 +1,11 @@
 import { USER_ROLE_LABELS } from '@readonly/shared';
-import { Link, useNavigate } from '@tanstack/solid-router';
+import { useNavigate } from '@tanstack/solid-router';
 import { ApiError } from '@web/api/client';
 import type { Registration, UserDetail } from '@web/api/contracts';
 import { addAdmin, editUser } from '@web/api/users';
 import { ErrorNotice, notify } from '@web/components/Feedback';
 import Field from '@web/components/Field';
-import Icon from '@web/components/Icon';
+import Modal from '@web/components/Modal';
 import { queryClient } from '@web/lib/query';
 import { currentUser, setCurrentUser } from '@web/lib/session';
 import {
@@ -31,6 +31,9 @@ export default function UserForm(props: { user?: UserDetail }) {
   const [busy, setBusy] = createSignal(false);
   const update = (field: keyof Registration, value: string) =>
     setInput((previous) => ({ ...previous, [field]: value }));
+  function close() {
+    if (!busy()) void navigate({ to: '/admin/users' });
+  }
   async function submit(event: SubmitEvent) {
     event.preventDefault();
     if (busy()) return;
@@ -80,121 +83,103 @@ export default function UserForm(props: { user?: UserDetail }) {
     }
   }
   return (
-    <>
-      <Link to="/admin/users" class="back-link">
-        <Icon name="back" size={17} />
-        Management User
-      </Link>
-      <header class="section-heading">
-        <div>
-          <h1>{props.user ? 'Edit User' : 'Add Admin'}</h1>
-          <p>
-            {props.user
-              ? 'Perbarui informasi akun pengguna.'
-              : 'Tambahkan akun Admin Perpus baru.'}
-          </p>
-        </div>
-      </header>
-      <div class="user-form-card">
-        <div class="user-form-summary">
-          <span class="summary-icon">
-            <Icon name="users" size={30} />
-          </span>
-          <h2>{props.user ? props.user.full_name : 'Admin Perpus'}</h2>
-          <p>
-            {props.user
-              ? USER_ROLE_LABELS[props.user.role]
-              : 'Akun baru akan berstatus Aktif.'}
-          </p>
-        </div>
-        <form onSubmit={submit} noValidate aria-busy={busy()}>
-          <Show when={failure()}>
-            <ErrorNotice error={failure()} />
-          </Show>
-          {/* AC-12.02–AC-12.05: email/role terkunci pada Edit; alamat hanya untuk Member. */}
+    <Modal
+      title={props.user ? 'Edit User' : 'Tambah Admin'}
+      class="user-form-modal"
+      onClose={close}
+    >
+      <form onSubmit={submit} noValidate aria-busy={busy()}>
+        <Show when={failure()}>
+          <ErrorNotice error={failure()} />
+        </Show>
+        {/* AC-12.02–AC-12.05: email/role terkunci pada Edit; alamat hanya untuk Member. */}
+        <Field
+          name="full_name"
+          label="Nama Lengkap"
+          value={input().full_name}
+          onInput={(value) => update('full_name', value)}
+          error={errors().full_name}
+          autocomplete="name"
+          placeholder="Masukkan nama lengkap"
+        />
+        <Field
+          name="email"
+          label="Email"
+          value={input().email}
+          onInput={(value) => update('email', value)}
+          error={errors().email}
+          type="email"
+          autocomplete="email"
+          readonly={Boolean(props.user)}
+          placeholder="Masukkan e-mail"
+        />
+        <Show when={props.user?.role === 'member'}>
           <Field
-            name="full_name"
-            label="Nama Lengkap"
-            value={input().full_name}
-            onInput={(value) => update('full_name', value)}
-            error={errors().full_name}
-            autocomplete="name"
-            placeholder="Masukkan nama lengkap"
+            name="address"
+            label="Alamat"
+            value={input().address}
+            onInput={(value) => update('address', value)}
+            error={errors().address}
+            autocomplete="street-address"
           />
-          <Field
-            name="email"
-            label="Email"
-            value={input().email}
-            onInput={(value) => update('email', value)}
-            error={errors().email}
-            type="email"
-            autocomplete="email"
-            readonly={Boolean(props.user)}
-            placeholder="Masukkan e-mail"
-          />
-          <Field
-            name="phone_number"
-            label="Nomor Ponsel"
-            value={input().phone_number}
-            onInput={(value) => update('phone_number', value)}
-            error={errors().phone_number}
-            type="tel"
-            autocomplete="tel"
-            placeholder="Masukkan nomor ponsel"
-          />
-          <Show
-            when={props.user}
-            fallback={
-              <div class="form-grid">
-                <Field
-                  name="password"
-                  label="Password"
-                  value={input().password}
-                  onInput={(value) => update('password', value)}
-                  error={errors().password}
-                  type="password"
-                  autocomplete="new-password"
-                />
-                <Field
-                  name="confirm_password"
-                  label="Konfirmasi Password"
-                  value={input().confirm_password}
-                  onInput={(value) => update('confirm_password', value)}
-                  error={errors().confirm_password}
-                  type="password"
-                  autocomplete="new-password"
-                />
-              </div>
-            }
-          >
-            <Field
-              name="role"
-              label="Role"
-              value={props.user ? USER_ROLE_LABELS[props.user.role] : ''}
-              onInput={() => {}}
-              readonly
-            />
-            <Show when={props.user?.role === 'member'}>
+        </Show>
+        <Field
+          name="phone_number"
+          label="Nomor Ponsel"
+          value={input().phone_number}
+          onInput={(value) => update('phone_number', value)}
+          error={errors().phone_number}
+          type="tel"
+          autocomplete="tel"
+          placeholder="Masukkan nomor ponsel"
+        />
+        <Show
+          when={props.user}
+          fallback={
+            <div class="form-grid">
               <Field
-                name="address"
-                label="Alamat"
-                value={input().address}
-                onInput={(value) => update('address', value)}
-                error={errors().address}
-                autocomplete="street-address"
+                name="password"
+                label="Password"
+                value={input().password}
+                onInput={(value) => update('password', value)}
+                error={errors().password}
+                type="password"
+                autocomplete="new-password"
               />
-            </Show>
-          </Show>
-          <div class="form-actions">
-            <Link to="/admin/users" class="button secondary">
-              Batal
-            </Link>
-            <button class="button" type="submit" disabled={busy()}>
-              {busy() ? 'Menyimpan…' : 'Save'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </>
+              <Field
+                name="confirm_password"
+                label="Konfirmasi Password"
+                value={input().confirm_password}
+                onInput={(value) => update('confirm_password', value)}
+                error={errors().confirm_password}
+                type="password"
+                autocomplete="new-password"
+              />
+            </div>
+          }
+        >
+          <Field
+            name="role"
+            label="Role"
+            value={props.user ? USER_ROLE_LABELS[props.user.role] : ''}
+            onInput={() => {}}
+            readonly
+          />
+        </Show>
+        <div class="form-actions">
+          <button
+            type="button"
+            class="button secondary"
+            disabled={busy()}
+            onClick={close}
+          >
+            Batal
+          </button>
+          <button class="button" type="submit" disabled={busy()}>
+            {busy() ? 'Menyimpan…' : props.user ? 'Save' : 'Add'}
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }
