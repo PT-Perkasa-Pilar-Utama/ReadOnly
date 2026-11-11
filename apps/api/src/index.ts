@@ -21,6 +21,8 @@ const app = createApp(
     ? {
         db: dbClient.db,
         database: dbClient.ping,
+        enableScheduler: true,
+        autoCatchUp: true,
       }
     : undefined,
 );

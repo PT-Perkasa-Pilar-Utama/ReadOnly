@@ -3,7 +3,9 @@ import {
   books,
   type Database,
   genres,
+  loanEvents,
   loans,
+  notifications,
   QA_IDS,
   users,
 } from '@readonly/db';
@@ -12,6 +14,7 @@ import {
   type AdminLoanStatus,
   type AdminLoansQuery,
   type FineStatus,
+  formatIndonesianDate,
   type LoanStatus,
 } from '@readonly/shared';
 import {
@@ -21,6 +24,8 @@ import {
   eq,
   ilike,
   inArray,
+  isNull,
+  lt,
   or,
   type SQL,
   sql,
@@ -73,9 +78,33 @@ export interface AdminLoanDetailRecord {
   fineStatus: FineStatus;
 }
 
+export interface OverdueCandidateLoan {
+  id: string;
+  loanNo: string;
+  userId: string;
+  bookId: string;
+  bookTitle: string;
+  dueDate: string;
+  status: LoanStatus;
+  returnRequestedAt: Date | null;
+}
+
+export interface TransitionToOverdueInput {
+  loanId: string;
+  lateDays: number;
+  fineAmount: number | null;
+  now: Date;
+  bookTitle: string;
+  userId: string;
+  dueDate: string;
+}
+
 export interface LoansRepository {
   listAdminLoans(params: AdminLoansQuery): Promise<AdminLoansQueryResult>;
   findAdminLoanById(id: string): Promise<AdminLoanDetailRecord | null>;
+  findLoanById(id: string): Promise<AdminLoanDetailRecord | null>;
+  findOverdueCandidateLoans(todayWib: string): Promise<OverdueCandidateLoan[]>;
+  transitionToOverdue(params: TransitionToOverdueInput): Promise<void>;
 }
 
 export class DrizzleLoansRepository implements LoansRepository {
@@ -213,6 +242,87 @@ export class DrizzleLoansRepository implements LoansRepository {
       fineStatus: loanRow.fineStatus,
     };
   }
+
+  async findLoanById(id: string): Promise<AdminLoanDetailRecord | null> {
+    return this.findAdminLoanById(id);
+  }
+
+  async findOverdueCandidateLoans(
+    todayWib: string,
+  ): Promise<OverdueCandidateLoan[]> {
+    const rows = await this.db
+      .select({
+        id: loans.id,
+        loanNo: loans.loanNo,
+        userId: loans.userId,
+        bookId: loans.bookId,
+        bookTitle: books.title,
+        dueDate: loans.dueDate,
+        status: loans.status,
+        returnRequestedAt: loans.returnRequestedAt,
+      })
+      .from(loans)
+      .innerJoin(books, eq(loans.bookId, books.id))
+      .where(
+        and(
+          eq(loans.status, 'BORROWED'),
+          isNull(loans.returnRequestedAt),
+          lt(loans.dueDate, todayWib),
+        ),
+      )
+      .orderBy(asc(loans.dueDate), asc(loans.id));
+
+    return rows.map((r) => ({
+      id: r.id,
+      loanNo: r.loanNo,
+      userId: r.userId,
+      bookId: r.bookId,
+      bookTitle: r.bookTitle,
+      dueDate: r.dueDate ?? '',
+      status: r.status,
+      returnRequestedAt: r.returnRequestedAt,
+    }));
+  }
+
+  async transitionToOverdue(params: TransitionToOverdueInput): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(loans)
+        .set({
+          status: 'OVERDUE',
+          lateDays: params.lateDays,
+          fineAmount: params.fineAmount,
+          fineStatus: 'Belum Bayar',
+        })
+        .where(eq(loans.id, params.loanId));
+
+      await tx.insert(loanEvents).values({
+        loanId: params.loanId,
+        fromStatus: 'BORROWED',
+        toStatus: 'OVERDUE',
+        actorId: null,
+        createdAt: params.now,
+      });
+
+      const formattedDueDate = formatIndonesianDate(params.dueDate);
+      const notifText = `${params.bookTitle} jatuh tempo pada ${formattedDueDate}. Segera ajukan pengembalian.`;
+
+      await tx
+        .insert(notifications)
+        .values({
+          loanId: params.loanId,
+          userId: params.userId,
+          type: 'OVERDUE',
+          title: 'Buku melewati batas pengembalian',
+          text: notifText,
+          isRead: false,
+          createdAt: params.now,
+        })
+        .onConflictDoNothing({
+          target: [notifications.loanId, notifications.type],
+        });
+    });
+  }
 }
 
 interface InMemoryUser {
@@ -248,10 +358,32 @@ export interface InMemoryLoan {
   fineStatus: FineStatus;
 }
 
+export interface InMemoryLoanEvent {
+  id: string;
+  loanId: string;
+  fromStatus: string | null;
+  toStatus: string;
+  actorId: string | null;
+  createdAt: Date;
+}
+
+export interface InMemoryNotification {
+  id: string;
+  loanId: string;
+  userId: string;
+  type: 'DUE_SOON_3D' | 'DUE_TODAY' | 'OVERDUE';
+  title: string;
+  text: string;
+  isRead: boolean;
+  createdAt: Date;
+}
+
 export class InMemoryLoansRepository implements LoansRepository {
   private readonly users = new Map<string, InMemoryUser>();
   private readonly books = new Map<string, InMemoryBook>();
   private readonly loans: InMemoryLoan[] = [];
+  private readonly loanEvents: InMemoryLoanEvent[] = [];
+  private readonly notifications: InMemoryNotification[] = [];
 
   constructor() {
     this.seedDefaultData();
@@ -673,5 +805,90 @@ export class InMemoryLoansRepository implements LoansRepository {
 
   addUser(user: InMemoryUser): void {
     this.users.set(user.id, user);
+  }
+
+  async findLoanById(id: string): Promise<AdminLoanDetailRecord | null> {
+    return this.findAdminLoanById(id);
+  }
+
+  async findOverdueCandidateLoans(
+    todayWib: string,
+  ): Promise<OverdueCandidateLoan[]> {
+    return this.loans
+      .filter(
+        (l) =>
+          l.status === 'BORROWED' &&
+          l.returnRequestedAt === null &&
+          l.dueDate !== null &&
+          l.dueDate < todayWib,
+      )
+      .map((l) => ({
+        id: l.id,
+        loanNo: l.loanNo,
+        userId: l.userId,
+        bookId: l.bookId,
+        bookTitle: this.books.get(l.bookId)?.title ?? '',
+        dueDate: l.dueDate ?? '',
+        status: l.status,
+        returnRequestedAt: l.returnRequestedAt,
+      }));
+  }
+
+  async transitionToOverdue(params: TransitionToOverdueInput): Promise<void> {
+    const loan = this.loans.find((l) => l.id === params.loanId);
+    if (!loan) {
+      throw new Error(
+        `Loan ${params.loanId} not found in in-memory repository.`,
+      );
+    }
+
+    loan.status = 'OVERDUE';
+    loan.lateDays = params.lateDays;
+    loan.fineAmount = params.fineAmount;
+    loan.fineStatus = 'Belum Bayar';
+
+    this.loanEvents.push({
+      id: crypto.randomUUID(),
+      loanId: params.loanId,
+      fromStatus: 'BORROWED',
+      toStatus: 'OVERDUE',
+      actorId: null,
+      createdAt: params.now,
+    });
+
+    const alreadyNotified = this.notifications.some(
+      (n) => n.loanId === params.loanId && n.type === 'OVERDUE',
+    );
+    if (!alreadyNotified) {
+      const formattedDueDate = formatIndonesianDate(params.dueDate);
+      this.notifications.push({
+        id: crypto.randomUUID(),
+        loanId: params.loanId,
+        userId: params.userId,
+        type: 'OVERDUE',
+        title: 'Buku melewati batas pengembalian',
+        text: `${params.bookTitle} jatuh tempo pada ${formattedDueDate}. Segera ajukan pengembalian.`,
+        isRead: false,
+        createdAt: params.now,
+      });
+    }
+  }
+
+  getLoanEvents(loanId?: string): InMemoryLoanEvent[] {
+    if (loanId) {
+      return this.loanEvents.filter((e) => e.loanId === loanId);
+    }
+    return [...this.loanEvents];
+  }
+
+  getNotifications(loanId?: string): InMemoryNotification[] {
+    if (loanId) {
+      return this.notifications.filter((n) => n.loanId === loanId);
+    }
+    return [...this.notifications];
+  }
+
+  getLoans(): InMemoryLoan[] {
+    return [...this.loans];
   }
 }

@@ -3,14 +3,47 @@ import {
   type AdminLoanItem,
   type AdminLoansQuery,
   type ApiSuccessEnvelope,
+  calculateFine,
   computeFineAmount,
+  getWibDateString,
+  getWibDaysDifference,
   LOAN_STATUS_LABELS,
+  type LoanStatus,
   type PaginatedResponse,
 } from '@readonly/shared';
 import { type ClockPort, SystemClock } from '../../ports/clock';
 import type { StoragePort } from '../../ports/storage';
-import { createNotFoundError } from '../../shared/errors';
+import {
+  createInvalidStateTransitionError,
+  createNotFoundError,
+} from '../../shared/errors';
 import type { LoansRepository } from './loans.repository';
+
+const ALLOWED_TRANSITIONS: Record<LoanStatus, readonly LoanStatus[]> = {
+  PENDING: ['BORROWED'],
+  BORROWED: ['OVERDUE', 'RETURN_PENDING'],
+  OVERDUE: ['FINE_PENDING'],
+  RETURN_PENDING: ['RETURNED'],
+  FINE_PENDING: ['FINE_PENDING', 'RETURNED'],
+  RETURNED: [],
+};
+
+export interface LoanTransitionOptions {
+  loanId: string;
+  targetStatus: LoanStatus;
+  actorId?: string | null;
+  context?: {
+    todayWib?: string;
+  };
+}
+
+export interface LoanTransitionResult {
+  loanId: string;
+  previousStatus: LoanStatus;
+  currentStatus: LoanStatus;
+  lateDays?: number;
+  fineAmount?: number | null;
+}
 
 export interface LoansServiceOptions {
   repository: LoansRepository;
@@ -129,5 +162,70 @@ export class LoansService {
     return {
       data,
     };
+  }
+
+  getRepository(): LoansRepository {
+    return this.repository;
+  }
+
+  async transition(
+    options: LoanTransitionOptions,
+  ): Promise<LoanTransitionResult> {
+    const loan = await this.repository.findLoanById(options.loanId);
+    if (!loan) {
+      throw createNotFoundError('Peminjaman tidak ditemukan.');
+    }
+
+    const currentStatus = loan.status;
+    const targetStatus = options.targetStatus;
+    const allowed = ALLOWED_TRANSITIONS[currentStatus];
+
+    if (!allowed?.includes(targetStatus)) {
+      throw createInvalidStateTransitionError(
+        `Transisi status dari ${currentStatus} ke ${targetStatus} tidak valid.`,
+      );
+    }
+
+    if (currentStatus === 'BORROWED' && targetStatus === 'OVERDUE') {
+      if (loan.returnRequestedAt !== null) {
+        throw createInvalidStateTransitionError(
+          'Peminjaman telah mengajukan pengembalian.',
+        );
+      }
+
+      const todayWib =
+        options.context?.todayWib ?? getWibDateString(this.clock.now());
+
+      if (!loan.dueDate || loan.dueDate >= todayWib) {
+        throw createInvalidStateTransitionError(
+          'Peminjaman belum melewati batas waktu.',
+        );
+      }
+
+      const lateDays = getWibDaysDifference(loan.dueDate, todayWib);
+      const fineAmount = calculateFine(lateDays);
+
+      await this.repository.transitionToOverdue({
+        loanId: loan.id,
+        lateDays,
+        fineAmount,
+        now: this.clock.now(),
+        bookTitle: loan.book.title,
+        userId: loan.borrower.id,
+        dueDate: loan.dueDate,
+      });
+
+      return {
+        loanId: loan.id,
+        previousStatus: currentStatus,
+        currentStatus: targetStatus,
+        lateDays,
+        fineAmount,
+      };
+    }
+
+    throw createInvalidStateTransitionError(
+      `Transisi status ${targetStatus} belum diimplementasikan.`,
+    );
   }
 }
