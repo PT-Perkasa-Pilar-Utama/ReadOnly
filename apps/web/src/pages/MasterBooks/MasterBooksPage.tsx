@@ -121,7 +121,7 @@ export function MasterBooksPage() {
     <div class="master-books-app">
       <AdminHeader activeSection="books" />
 
-      <main class="master-books-main">
+      <main class="master-books-main master-books-main--list">
         <section class="master-books-heading">
           <div>
             <h1>Master Buku</h1>
@@ -139,66 +139,67 @@ export function MasterBooksPage() {
           </div>
         </section>
 
-        <section class="master-books-panel" aria-label="Daftar buku">
-          <div class="master-books-toolbar">
-            <label class="master-books-search">
-              <span>Cari Buku</span>
-              <input
-                type="search"
-                value={searchText()}
-                onInput={(event) => setSearchText(event.currentTarget.value)}
-                placeholder="Cari judul buku, penulis, atau genre"
-                aria-label="Cari judul buku, penulis, atau genre"
-              />
-            </label>
+        <div class="master-books-toolbar" aria-label="Filter buku">
+          <label class="master-books-search">
+            <span>Cari Buku</span>
+            <input
+              type="search"
+              value={searchText()}
+              onInput={(event) => setSearchText(event.currentTarget.value)}
+              placeholder="Cari judul buku, penulis, atau genre"
+              aria-label="Cari judul buku, penulis, atau genre"
+            />
+          </label>
 
-            <label class="master-books-filter-field">
-              <span>Author</span>
-              <select
-                value={selectedAuthor()}
-                onChange={(event) =>
-                  setSelectedAuthor(event.currentTarget.value)
-                }
-                aria-label="Filter Author"
-              >
-                <option value="">All Authors</option>
-                <For each={booksQuery.data?.authors ?? []}>
-                  {(author) => <option value={author}>{author}</option>}
-                </For>
-              </select>
-            </label>
-
-            <label class="master-books-filter-field">
-              <span>Genre</span>
-              <select
-                value={selectedGenre()}
-                onChange={(event) =>
-                  setSelectedGenre(event.currentTarget.value)
-                }
-                aria-label="Filter Genre"
-              >
-                <option value="">Semua Genre</option>
-                <For each={genresQuery.data ?? []}>
-                  {(genre) => <option value={genre.id}>{genre.name}</option>}
-                </For>
-              </select>
-            </label>
-
-            <button
-              class="master-books-button master-books-button--filter"
-              type="button"
-              onClick={applyFilters}
-              disabled={genresQuery.isPending || booksQuery.isPending}
+          <label class="master-books-filter-field">
+            <span>Penulis</span>
+            <select
+              value={selectedAuthor()}
+              onChange={(event) =>
+                setSelectedAuthor(event.currentTarget.value)
+              }
+              aria-label="Filter Penulis"
             >
-              Set Filter
-            </button>
-          </div>
+              <option value="">Semua Penulis</option>
+              <For each={booksQuery.data?.authors ?? []}>
+                {(author) => <option value={author}>{author}</option>}
+              </For>
+            </select>
+          </label>
 
-          <Show when={genresQuery.isError}>
-            <p class="master-books-inline-error" role="alert">
-              {getErrorMessage(genresQuery.error)}
-            </p>
-          </Show>
+          <label class="master-books-filter-field">
+            <span>Genre</span>
+            <select
+              value={selectedGenre()}
+              onChange={(event) =>
+                setSelectedGenre(event.currentTarget.value)
+              }
+              aria-label="Filter Genre"
+            >
+              <option value="">Semua Genre</option>
+              <For each={genresQuery.data ?? []}>
+                {(genre) => <option value={genre.id}>{genre.name}</option>}
+              </For>
+            </select>
+          </label>
+
+          <button
+            class="master-books-button master-books-button--filter"
+            type="button"
+            onClick={applyFilters}
+            disabled={genresQuery.isPending || booksQuery.isPending}
+          >
+            Set Filter
+          </button>
+        </div>
+
+        <Show when={genresQuery.isError}>
+          <p class="master-books-inline-error" role="alert">
+            {getErrorMessage(genresQuery.error)}
+          </p>
+        </Show>
+
+        <section class="master-books-panel" aria-label="Daftar buku">
 
           <Show when={booksQuery.isPending}>
             <div class="master-books-state" aria-live="polite" aria-busy="true">
@@ -324,52 +325,55 @@ export function MasterBooksPage() {
               </table>
             </div>
 
-            <div class="master-books-table-footer">
-              <p>
-                Menampilkan {booksQuery.data?.books.length ?? 0} dari{' '}
-                {numberFormatter.format(totalBooks())} buku
-              </p>
-              <nav
-                class="master-books-pagination"
-                aria-label="Paginasi daftar buku"
-              >
-                <button
-                  type="button"
-                  aria-label="Halaman sebelumnya"
-                  disabled={currentPage() <= 1}
-                  onClick={() => setPage((value) => Math.max(1, value - 1))}
-                >
-                  ‹
-                </button>
-                <For each={visiblePageNumbers()}>
-                  {(pageNumber) => (
-                    <button
-                      type="button"
-                      classList={{ 'is-current': pageNumber === currentPage() }}
-                      aria-label={`Halaman ${pageNumber}`}
-                      aria-current={
-                        pageNumber === currentPage() ? 'page' : undefined
-                      }
-                      onClick={() => setPage(pageNumber)}
-                    >
-                      {pageNumber}
-                    </button>
-                  )}
-                </For>
-                <button
-                  type="button"
-                  aria-label="Halaman berikutnya"
-                  disabled={totalPages() === 0 || currentPage() >= totalPages()}
-                  onClick={() =>
-                    setPage((value) => Math.min(totalPages(), value + 1))
-                  }
-                >
-                  ›
-                </button>
-              </nav>
-            </div>
           </Show>
         </section>
+
+        <Show when={!booksQuery.isPending && !booksQuery.isError}>
+          <div class="master-books-table-footer">
+            <p>
+              Menampilkan {booksQuery.data?.books.length ?? 0} dari{' '}
+              {numberFormatter.format(totalBooks())} buku
+            </p>
+            <nav
+              class="master-books-pagination"
+              aria-label="Paginasi daftar buku"
+            >
+              <button
+                type="button"
+                aria-label="Halaman sebelumnya"
+                disabled={currentPage() <= 1}
+                onClick={() => setPage((value) => Math.max(1, value - 1))}
+              >
+                ‹
+              </button>
+              <For each={visiblePageNumbers()}>
+                {(pageNumber) => (
+                  <button
+                    type="button"
+                    classList={{ 'is-current': pageNumber === currentPage() }}
+                    aria-label={`Halaman ${pageNumber}`}
+                    aria-current={
+                      pageNumber === currentPage() ? 'page' : undefined
+                    }
+                    onClick={() => setPage(pageNumber)}
+                  >
+                    {pageNumber}
+                  </button>
+                )}
+              </For>
+              <button
+                type="button"
+                aria-label="Halaman berikutnya"
+                disabled={totalPages() === 0 || currentPage() >= totalPages()}
+                onClick={() =>
+                  setPage((value) => Math.min(totalPages(), value + 1))
+                }
+              >
+                ›
+              </button>
+            </nav>
+          </div>
+        </Show>
       </main>
     </div>
   );

@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Gelasio:wght@400;700&display=swap');
+
 :root {
   --dashboard-primary: #702d40;
   --dashboard-primary-dark: #5b2333;
@@ -29,15 +31,19 @@ a {
   min-height: 100vh;
   background: var(--dashboard-background);
   color: var(--dashboard-text);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: 'Raleway', Arial, sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+.dashboard-app .admin-header__brand {
+  font-family: 'Gelasio', Georgia, serif;
+}
+
 .dashboard-main {
-  width: min(100% - 80px, 1380px);
+  width: min(100% - 128px, 1380px);
   margin: 0 auto;
   padding: 38px 0 64px;
 }
@@ -53,7 +59,7 @@ a {
 .dashboard-heading__copy h1 {
   margin: 0;
   color: var(--dashboard-text);
-  font-family: Georgia, 'Times New Roman', serif;
+  font-family: 'Raleway', Arial, sans-serif;
   font-size: clamp(30px, 4vw, 38px);
   font-weight: 700;
   letter-spacing: -0.7px;
@@ -82,7 +88,7 @@ a {
   gap: 8px;
   padding: 0 16px;
   border: 1px solid var(--dashboard-primary);
-  border-radius: 6px;
+  border-radius: 12px;
   background: var(--dashboard-primary);
   color: #fff;
   font-size: 12px;
@@ -115,12 +121,13 @@ a {
   flex-direction: column;
   padding: 21px 20px 18px;
   border: 1px solid var(--dashboard-border);
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--dashboard-card);
   box-shadow: 0 3px 12px rgb(60 38 30 / 3%);
 }
 
 .dashboard-metric-card h2 {
+  font-family: 'Raleway', Arial, sans-serif;
   min-height: 34px;
   margin: 0;
   color: #574d4b;
@@ -132,7 +139,7 @@ a {
 .dashboard-metric-card__value {
   margin: 8px 0 7px;
   color: var(--dashboard-text);
-  font-family: Georgia, 'Times New Roman', serif;
+  font-family: 'Raleway', Arial, sans-serif;
   font-size: clamp(28px, 3vw, 34px);
   font-weight: 700;
   line-height: 1;
@@ -149,12 +156,13 @@ a {
 .dashboard-chart-card {
   padding: 25px 27px 30px;
   border: 1px solid var(--dashboard-border);
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--dashboard-card);
   box-shadow: 0 3px 12px rgb(60 38 30 / 3%);
 }
 
 .dashboard-chart-heading h2 {
+  font-family: 'Raleway', Arial, sans-serif;
   margin: 0;
   color: #3e3533;
   font-size: 19px;
@@ -189,6 +197,9 @@ a {
   display: grid;
   width: min(100%, 690px);
   gap: 22px;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 
 .dashboard-chart-legend__item {
@@ -228,7 +239,7 @@ a {
 
 .dashboard-chart-legend__item strong {
   color: var(--dashboard-text);
-  font-family: Georgia, 'Times New Roman', serif;
+  font-family: 'Raleway', Arial, sans-serif;
   font-size: 22px;
   font-variant-numeric: tabular-nums;
 }
@@ -242,10 +253,28 @@ a {
   gap: 12px;
   padding: 32px;
   border: 1px solid var(--dashboard-border);
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--dashboard-card);
   color: var(--dashboard-muted);
   text-align: center;
+}
+
+.dashboard-state--error {
+  width: fit-content;
+  max-width: 100%;
+  min-height: 0;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0;
+  margin: -12px 0 18px;
+  padding: 8px 12px;
+  border-color: #ead6d6;
+  background: #fff7f7;
+  color: #8f4248;
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: left;
 }
 
 .dashboard-loader {

@@ -11,6 +11,7 @@ import {
 } from '../../api/genres';
 import { AdminHeader } from '../../components/AdminHeader';
 import { ErrorNotice, Loading, notify } from '../../components/Feedback';
+import { requestAdminConfirmation } from '../../components/admin-feedback-store';
 import Modal from '../../components/Modal';
 import Pagination from '../../components/Pagination';
 import { debounced } from '../../lib/debounced';
@@ -123,6 +124,11 @@ export default function MasterGenresPage() {
       getAdminGenreList({ q: searchTerm(), page: page(), limit: 10 }, signal),
   }));
 
+  function applySearch() {
+    setPage(1);
+    void genresQuery.refetch();
+  }
+
   async function refreshGenreConsumers() {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['admin', 'genres'] }),
@@ -161,7 +167,9 @@ export default function MasterGenresPage() {
 
     if (
       status === 'inactive' &&
-      !window.confirm(`Apakah Anda yakin menonaktifkan genre ${genre.name}?`)
+      !(await requestAdminConfirmation(
+        `Apakah Anda yakin menonaktifkan genre ${genre.name}?`,
+      ))
     ) {
       return;
     }
@@ -188,7 +196,11 @@ export default function MasterGenresPage() {
 
   async function removeGenre(genre: AdminGenreItem) {
     if (busyGenreId()) return;
-    if (!window.confirm(`Apakah Anda yakin menghapus genre ${genre.name}?`)) {
+    if (
+      !(await requestAdminConfirmation(
+        `Apakah Anda yakin menghapus genre ${genre.name}?`,
+      ))
+    ) {
       return;
     }
 
@@ -233,22 +245,31 @@ export default function MasterGenresPage() {
           </button>
         </section>
 
+        <div class="master-genres-toolbar" aria-label="Filter genre">
+          <label class="master-genres-search">
+            <span>Nama Genre</span>
+            <input
+              type="search"
+              value={searchText()}
+              onInput={(event) => {
+                setSearchText(event.currentTarget.value);
+                setPage(1);
+              }}
+              placeholder="Masukkan nama genre"
+              aria-label="Cari nama genre"
+            />
+          </label>
+          <button
+            class="master-genres-button master-genres-button--filter"
+            type="button"
+            onClick={applySearch}
+            disabled={genresQuery.isPending}
+          >
+            Set Filter
+          </button>
+        </div>
+
         <section class="master-genres-panel" aria-label="Daftar genre">
-          <div class="master-genres-toolbar">
-            <label class="master-genres-search">
-              <span>Cari Genre</span>
-              <input
-                type="search"
-                value={searchText()}
-                onInput={(event) => {
-                  setSearchText(event.currentTarget.value);
-                  setPage(1);
-                }}
-                placeholder="Cari nama genre"
-                aria-label="Cari nama genre"
-              />
-            </label>
-          </div>
 
           <Show when={genresQuery.isPending}>
             <Loading label="Memuat daftar genre…" />
@@ -291,7 +312,7 @@ export default function MasterGenresPage() {
                       {(genre) => (
                         <tr>
                           <td class="master-genres-name">{genre.name}</td>
-                          <td>{genre.book_count}</td>
+                          <td>{genre.book_count} buku</td>
                           <td>
                             <span
                               class={`master-genres-status master-genres-status--${
@@ -305,47 +326,66 @@ export default function MasterGenresPage() {
                             <div class="master-genres-actions">
                               <button
                                 type="button"
-                                class="master-genres-action"
+                                class="master-genres-action master-genres-action--icon"
                                 onClick={() => openEdit(genre)}
                                 disabled={busyGenreId() === genre.id}
+                                aria-label={`Edit ${genre.name}`}
+                                title="Edit"
                               >
-                                Edit
+                                <svg viewBox="0 0 20 20" aria-hidden="true">
+                                  <path d="M3.5 13.9 13.7 3.7a1.8 1.8 0 0 1 2.6 0l.1.1a1.8 1.8 0 0 1 0 2.6L6.2 16.6l-3.1.8z" />
+                                  <path d="m11.9 5.5 2.6 2.6M3.1 17.4l3.1-.8" />
+                                </svg>
                               </button>
                               <Show
                                 when={genre.status === 'active'}
                                 fallback={
                                   <button
                                     type="button"
-                                    class="master-genres-action"
+                                    class="master-genres-action master-genres-action--icon"
                                     onClick={() =>
                                       void changeStatus(genre, 'active')
                                     }
                                     disabled={busyGenreId() === genre.id}
+                                    aria-label={`Aktifkan ${genre.name}`}
+                                    title="Aktifkan"
                                   >
-                                    Aktifkan
+                                    <svg viewBox="0 0 20 20" aria-hidden="true">
+                                      <rect x="2.5" y="5.5" width="15" height="9" rx="4.5" />
+                                      <circle cx="7.5" cy="10" r="2.5" />
+                                    </svg>
                                   </button>
                                 }
                               >
                                 <button
                                   type="button"
-                                  class="master-genres-action"
+                                  class="master-genres-action master-genres-action--icon"
                                   onClick={() =>
                                     void changeStatus(genre, 'inactive')
                                   }
                                   disabled={busyGenreId() === genre.id}
+                                  aria-label={`Nonaktifkan ${genre.name}`}
+                                  title="Nonaktifkan"
                                 >
-                                  Nonaktifkan
+                                  <svg viewBox="0 0 20 20" aria-hidden="true">
+                                    <rect x="2.5" y="5.5" width="15" height="9" rx="4.5" />
+                                    <circle cx="12.5" cy="10" r="2.5" />
+                                  </svg>
                                 </button>
                               </Show>
                               <button
                                 type="button"
                                 class={
-                                  'master-genres-action master-genres-action--delete'
+                                  'master-genres-action master-genres-action--icon master-genres-action--delete'
                                 }
                                 onClick={() => void removeGenre(genre)}
                                 disabled={busyGenreId() === genre.id}
+                                aria-label={`Hapus ${genre.name}`}
+                                title="Hapus"
                               >
-                                Hapus
+                                <svg viewBox="0 0 20 20" aria-hidden="true">
+                                  <path d="M4 5.5h12M7.2 5.5V3.8h5.6v1.7m-7.2 0 .7 10.8h6.9l.7-10.8M8 8.2v5.5m4-5.5v5.5" />
+                                </svg>
                               </button>
                             </div>
                           </td>

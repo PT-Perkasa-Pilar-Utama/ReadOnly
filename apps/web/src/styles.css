@@ -1141,13 +1141,15 @@ tbody tr:hover {
   display: flex;
   align-items: flex-start;
   gap: 11px;
-  border: 1px solid #e8c9cf;
-  background: #fcf0f1;
+  border: 1px solid #ead2d6;
+  background: #fcf5f4;
   color: #8d3446;
-  padding: 15px;
-  border-radius: var(--radius-control);
+  padding: 14px 16px;
+  border-radius: 12px;
   margin-bottom: 18px;
-  font-size: 14px;
+  font-family: 'Raleway', Arial, sans-serif;
+  font-size: 12px;
+  line-height: 1.55;
 }
 .error-notice > svg {
   margin-top: 1px;
@@ -1160,9 +1162,10 @@ tbody tr:hover {
   top: var(--feedback-top, 24px);
   left: 50%;
   transform: translateX(-50%);
-  width: min(960px, 67vw);
+  width: min(460px, calc(100vw - 32px));
   z-index: 100;
   pointer-events: none;
+  font-family: 'Raleway', Arial, sans-serif;
 }
 .toast {
   display: flex;
@@ -1171,8 +1174,9 @@ tbody tr:hover {
   background: #fff;
   padding: 14px 18px;
   border: 1px solid var(--line);
-  border-radius: var(--radius-control);
-  font-size: 14px;
+  border-radius: 12px;
+  font-family: 'Raleway', Arial, sans-serif;
+  font-size: 12px;
   pointer-events: auto;
 }
 .toast > span:nth-child(2) {
@@ -1201,11 +1205,12 @@ tbody tr:hover {
   top: calc(100% + 28px);
   z-index: 30;
   border: 1px solid var(--line);
-  border-radius: var(--radius-card);
+  border-radius: 12px;
   background: #fff;
   color: #302a2b;
-  box-shadow: 0 10px 40px #3a1b2c20;
-  padding: 28px;
+  box-shadow: 0 12px 36px rgb(58 27 44 / 12%);
+  padding: 20px 22px;
+  font-family: 'Raleway', Arial, sans-serif;
   max-height: min(650px, calc(100dvh - 180px));
   overflow-y: auto;
 }
@@ -1216,10 +1221,11 @@ tbody tr:hover {
   gap: 12px;
 }
 .notification-panel h2 {
-  font-family: var(--font-ui);
-  font-size: 22px;
-  font-weight: 600;
+  font-family: 'Raleway', Arial, sans-serif;
+  font-size: 17px;
+  font-weight: 700;
   margin: 0;
+  color: #302a2b;
 }
 .notification-list {
   padding: 0;
@@ -1236,17 +1242,21 @@ tbody tr:hover {
   border-top: 0;
 }
 .notification-list h3 {
-  font-size: 16px;
+  font-family: 'Raleway', Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 700;
   margin-bottom: 5px;
   line-height: 1.55;
 }
 .notification-list p {
-  font-size: 14px;
+  font-family: 'Raleway', Arial, sans-serif;
+  font-size: 11px;
   color: var(--muted);
   margin-bottom: 5px;
 }
 .notification-list time {
-  font-size: 14px;
+  font-family: 'Raleway', Arial, sans-serif;
+  font-size: 10px;
   color: var(--muted);
 }
 .notification-cover {
@@ -1275,16 +1285,19 @@ tbody tr:hover {
   left: 50%;
   transform: translateX(-50%);
   z-index: 40;
-  width: min(960px, 67vw);
+  width: min(520px, calc(100vw - 32px));
   max-height: calc(100dvh - 160px);
   overflow-y: auto;
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  padding: 14px 18px;
+  padding: 16px 18px;
   background: #fff;
   border: 1px solid var(--line);
-  border-radius: var(--radius-control);
+  border-radius: 12px;
+  box-shadow: 0 12px 36px rgb(58 27 44 / 12%);
+  color: #302a2b;
+  font-family: 'Raleway', Arial, sans-serif;
 }
 :root:has(.demo-banner) {
   --feedback-top: 54px;
@@ -1310,20 +1323,29 @@ body:has(.toast) .reminder-popup {
   border: 0;
 }
 .reminder-books p {
-  font-size: 14px;
+  font-family: 'Raleway', Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
   margin: 0;
-  line-height: 1.7;
+  line-height: 1.6;
 }
 .reminder-books span {
-  font-size: 11px;
+  font-family: 'Raleway', Arial, sans-serif;
+  font-size: 10px;
   color: var(--muted);
 }
 .reminder-error {
   position: fixed;
   right: 20px;
   bottom: 20px;
-  max-width: calc(100vw - 40px);
+  width: min(440px, calc(100vw - 40px));
   z-index: 40;
+  font-family: 'Raleway', Arial, sans-serif;
+}
+.reminder-error .error-notice {
+  margin-bottom: 0;
+  background: #fff;
+  box-shadow: 0 12px 36px rgb(58 27 44 / 12%);
 }
 @media (min-width: 1512px) {
   .app-footer {
@@ -1702,7 +1724,7 @@ body:has(.toast) .reminder-popup {
     width: calc(100vw - 24px);
   }
   .toast-region {
-    width: calc(100vw - 24px);
+    width: calc(100vw - 32px);
   }
 }
 @media (prefers-reduced-motion: reduce) {

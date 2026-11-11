@@ -1,9 +1,7 @@
 import { createQuery } from '@tanstack/solid-query';
 import { useNavigate } from '@tanstack/solid-router';
-import { createEffect, createSignal, For, onCleanup, Show } from 'solid-js';
+import { createSignal, For, Show } from 'solid-js';
 import {
-  ADMIN_LOAN_STATUSES,
-  type AdminLoanStatus,
   formatLoanDate,
   getAdminLoans,
   getLoanStatusClass,
@@ -16,63 +14,17 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : '';
 }
 
-function isAdminLoanStatus(value: string): value is AdminLoanStatus {
-  return ADMIN_LOAN_STATUSES.some((status) => status === value);
-}
-
 export function LoanManagementPage() {
   const navigate = useNavigate();
-  const [searchText, setSearchText] = createSignal('');
-  const [debouncedSearch, setDebouncedSearch] = createSignal('');
-  const [selectedStatus, setSelectedStatus] = createSignal('');
-  const [appliedStatus, setAppliedStatus] = createSignal<AdminLoanStatus | ''>(
-    '',
-  );
   const [page, setPage] = createSignal(1);
 
-  createEffect(() => {
-    const value = searchText().trim();
-    const timeoutId = window.setTimeout(() => setDebouncedSearch(value), 250);
-    onCleanup(() => window.clearTimeout(timeoutId));
-  });
-
-  createEffect(() => {
-    debouncedSearch();
-    setPage(1);
-  });
-
   const loansQuery = createQuery(() => ({
-    queryKey: [
-      'admin',
-      'loans',
-      'list',
-      debouncedSearch(),
-      appliedStatus(),
-      page(),
-    ],
-    queryFn: ({ signal }) => {
-      const search = debouncedSearch();
-      const status = appliedStatus();
-
-      return getAdminLoans(
-        {
-          ...(search ? { q: search } : {}),
-          ...(status !== '' ? { status } : {}),
-          page: page(),
-          limit: 10,
-        },
-        signal,
-      );
-    },
+    queryKey: ['admin', 'loans', 'list', page()],
+    queryFn: ({ signal }) =>
+      getAdminLoans({ page: page(), limit: 10 }, signal),
     refetchInterval: 60_000,
     refetchOnWindowFocus: true,
   }));
-
-  function applyFilters() {
-    const status = selectedStatus();
-    setAppliedStatus(isAdminLoanStatus(status) ? status : '');
-    setPage(1);
-  }
 
   const currentPage = () => loansQuery.data?.pagination.page ?? page();
   const totalPages = () => loansQuery.data?.pagination.totalPages ?? 0;
@@ -91,55 +43,15 @@ export function LoanManagementPage() {
     <div class="loan-management-app">
       <AdminHeader activeSection="loans" />
 
-      <main class="loan-management-main">
+      <main class="loan-management-main loan-management-main--list">
         <section class="loan-management-heading">
           <div>
             <h1>Manajemen Peminjaman</h1>
-            <p>Kelola dan pantau peminjaman buku perpustakaan</p>
+            <p>Periksa status peminjaman dan proses pengembalian buku.</p>
           </div>
         </section>
 
         <section class="loan-management-panel" aria-label="Daftar peminjaman">
-          <div class="loan-management-toolbar">
-            <label class="loan-management-search">
-              <span>Cari Peminjaman</span>
-              <input
-                type="search"
-                value={searchText()}
-                onInput={(event) => setSearchText(event.currentTarget.value)}
-                placeholder="Cari nomor peminjaman, nama peminjam, atau judul buku"
-                aria-label="Cari nomor peminjaman, nama peminjam, atau judul buku"
-              />
-            </label>
-
-            <label class="loan-management-filter">
-              <span>Status</span>
-              <select
-                value={selectedStatus()}
-                onChange={(event) =>
-                  setSelectedStatus(event.currentTarget.value)
-                }
-                aria-label="Filter status peminjaman"
-              >
-                <option value="">Semua Status</option>
-                <For each={ADMIN_LOAN_STATUSES}>
-                  {(status) => (
-                    <option value={status}>{getLoanStatusLabel(status)}</option>
-                  )}
-                </For>
-              </select>
-            </label>
-
-            <button
-              class="loan-management-button loan-management-button--primary"
-              type="button"
-              onClick={applyFilters}
-              disabled={loansQuery.isPending}
-            >
-              Set Filter
-            </button>
-          </div>
-
           <Show when={loansQuery.isPending}>
             <div
               class="loan-management-state"
@@ -164,12 +76,13 @@ export function LoanManagementPage() {
               <table class="loan-management-table">
                 <thead>
                   <tr>
-                    <th scope="col">Buku</th>
-                    <th scope="col">Peminjam</th>
+                    <th scope="col">Cover</th>
+                    <th scope="col">Judul Buku</th>
+                    <th scope="col">Nama Peminjam</th>
                     <th scope="col">Tanggal Peminjaman</th>
                     <th scope="col">Batas Pengembalian</th>
                     <th scope="col">Status</th>
-                    <th scope="col">Aksi</th>
+                    <th scope="col">Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -177,7 +90,7 @@ export function LoanManagementPage() {
                     when={(loansQuery.data?.loans.length ?? 0) > 0}
                     fallback={
                       <tr>
-                        <td class="loan-management-empty" colSpan={6}>
+                        <td class="loan-management-empty" colSpan={7}>
                           Tidak ada data peminjaman
                         </td>
                       </tr>
@@ -187,24 +100,19 @@ export function LoanManagementPage() {
                       {(loan) => (
                         <tr>
                           <td>
-                            <div class="loan-book-cell">
-                              <div class="loan-book-cover">
-                                <Show
-                                  when={loan.book_cover_url}
-                                  fallback={<span aria-hidden="true">▤</span>}
-                                >
-                                  <img
-                                    src={loan.book_cover_url ?? ''}
-                                    alt={`Cover ${loan.book_title}`}
-                                  />
-                                </Show>
-                              </div>
-                              <div class="loan-book-meta">
-                                <strong>{loan.book_title}</strong>
-                                <small>{loan.loan_no}</small>
-                              </div>
+                            <div class="loan-book-cover">
+                              <Show
+                                when={loan.book_cover_url}
+                                fallback={<span aria-hidden="true">▤</span>}
+                              >
+                                <img
+                                  src={loan.book_cover_url ?? ''}
+                                  alt={`Cover ${loan.book_title}`}
+                                />
+                              </Show>
                             </div>
                           </td>
+                          <td class="loan-book-title">{loan.book_title}</td>
                           <td>{loan.borrower_name}</td>
                           <td>{formatLoanDate(loan.confirmed_at)}</td>
                           <td>{formatLoanDate(loan.due_date)}</td>
@@ -245,52 +153,55 @@ export function LoanManagementPage() {
               </table>
             </div>
 
-            <div class="loan-management-footer">
-              <p>
-                Menampilkan {loansQuery.data?.loans.length ?? 0} dari{' '}
-                {totalLoans()} peminjaman
-              </p>
-              <nav
-                class="loan-management-pagination"
-                aria-label="Paginasi daftar peminjaman"
-              >
-                <button
-                  type="button"
-                  aria-label="Halaman sebelumnya"
-                  disabled={currentPage() <= 1}
-                  onClick={() => setPage((value) => Math.max(1, value - 1))}
-                >
-                  ‹
-                </button>
-                <For each={visiblePageNumbers()}>
-                  {(pageNumber) => (
-                    <button
-                      type="button"
-                      classList={{ 'is-current': pageNumber === currentPage() }}
-                      aria-label={`Halaman ${pageNumber}`}
-                      aria-current={
-                        pageNumber === currentPage() ? 'page' : undefined
-                      }
-                      onClick={() => setPage(pageNumber)}
-                    >
-                      {pageNumber}
-                    </button>
-                  )}
-                </For>
-                <button
-                  type="button"
-                  aria-label="Halaman berikutnya"
-                  disabled={totalPages() === 0 || currentPage() >= totalPages()}
-                  onClick={() =>
-                    setPage((value) => Math.min(totalPages(), value + 1))
-                  }
-                >
-                  ›
-                </button>
-              </nav>
-            </div>
           </Show>
         </section>
+
+        <Show when={!loansQuery.isPending && !loansQuery.isError}>
+          <div class="loan-management-footer">
+            <p>
+              Menampilkan {loansQuery.data?.loans.length ?? 0} dari{' '}
+              {totalLoans()} peminjaman.
+            </p>
+            <nav
+              class="loan-management-pagination"
+              aria-label="Paginasi daftar peminjaman"
+            >
+              <button
+                type="button"
+                aria-label="Halaman sebelumnya"
+                disabled={currentPage() <= 1}
+                onClick={() => setPage((value) => Math.max(1, value - 1))}
+              >
+                ‹
+              </button>
+              <For each={visiblePageNumbers()}>
+                {(pageNumber) => (
+                  <button
+                    type="button"
+                    classList={{ 'is-current': pageNumber === currentPage() }}
+                    aria-label={`Halaman ${pageNumber}`}
+                    aria-current={
+                      pageNumber === currentPage() ? 'page' : undefined
+                    }
+                    onClick={() => setPage(pageNumber)}
+                  >
+                    {pageNumber}
+                  </button>
+                )}
+              </For>
+              <button
+                type="button"
+                aria-label="Halaman berikutnya"
+                disabled={totalPages() === 0 || currentPage() >= totalPages()}
+                onClick={() =>
+                  setPage((value) => Math.min(totalPages(), value + 1))
+                }
+              >
+                ›
+              </button>
+            </nav>
+          </div>
+        </Show>
       </main>
     </div>
   );
