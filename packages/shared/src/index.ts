@@ -3,3 +3,4 @@ export * from './auth';
 export * from './books';
 export * from './constants';
 export * from './genres';
+export * from './loans';

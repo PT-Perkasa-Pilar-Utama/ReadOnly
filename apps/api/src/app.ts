@@ -20,6 +20,13 @@ import {
 } from './modules/books/books.repository';
 import { createBooksRoutes } from './modules/books/books.routes';
 import { BooksService } from './modules/books/books.service';
+import {
+  DrizzleLoansRepository,
+  InMemoryLoansRepository,
+  type LoansRepository,
+} from './modules/loans/loans.repository';
+import { createLoansRoutes } from './modules/loans/loans.routes';
+import { LoansService } from './modules/loans/loans.service';
 import { createSystemRoutes, type HealthChecks } from './modules/system/health';
 import { type ClockPort, SystemClock } from './ports/clock';
 import {
@@ -43,6 +50,8 @@ export interface AppOptions {
   authRepository?: AuthRepository;
   booksService?: BooksService;
   authService?: AuthService;
+  loansRepository?: LoansRepository;
+  loansService?: LoansService;
   registerRateLimiter?: RateLimiter;
   registerRateLimitMax?: number;
   registerRateLimitWindowMs?: number;
@@ -230,6 +239,20 @@ export function createApp(options?: AppOptions) {
       windowMs: options?.loginRateLimitWindowMs ?? resolveRateLimitWindowMs(),
     });
 
+  const loansRepository =
+    options?.loansRepository ??
+    (options?.db
+      ? new DrizzleLoansRepository(options.db)
+      : new InMemoryLoansRepository());
+
+  const loansService =
+    options?.loansService ??
+    new LoansService({
+      repository: loansRepository,
+      storage: storagePort,
+      clock,
+    });
+
   const healthChecks = resolveHealthChecks(options);
 
   return new Elysia({ prefix: API_PREFIX })
@@ -247,5 +270,6 @@ export function createApp(options?: AppOptions) {
     })
     .use(createSystemRoutes(healthChecks))
     .use(createBooksRoutes(booksService, authService))
-    .use(createAuthRoutes(authService, registerRateLimiter, loginRateLimiter));
+    .use(createAuthRoutes(authService, registerRateLimiter, loginRateLimiter))
+    .use(createLoansRoutes(loansService, authService));
 }
