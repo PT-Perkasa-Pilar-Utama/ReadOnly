@@ -104,4 +104,3 @@ describe('shared loans schemas & computeFineAmount (BE-S3-01 / US-06)', () => {
     expect(adminLoanDetailDataSchema.parse(validDetail)).toEqual(validDetail);
   });
 });
-

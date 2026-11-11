@@ -35,4 +35,3 @@ export function createLoansRoutes(
       return loansService.getAdminLoanDetail(id);
     });
 }
-
