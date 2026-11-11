@@ -6,11 +6,19 @@ import {
   adminBooksResponseSchema,
   adminGenreItemSchema,
   adminGenresResponseSchema,
+  type BookDetailItem,
+  type BookDetailResponse,
   type BookGenreItem,
   type BookMutationResponseData,
+  bookDetailItemSchema,
+  bookDetailResponseSchema,
   bookGenreItemSchema,
+  type CatalogBookItem,
+  type CatalogBooksResponse,
   type CreateGenreInput,
   type CreateGenreResponseData,
+  catalogBookItemSchema,
+  catalogBooksResponseSchema,
   createGenreInputSchema,
   type DeleteGenreResponseData,
   type GenreItem,
@@ -30,11 +38,19 @@ export {
   adminBooksResponseSchema,
   adminGenreItemSchema,
   adminGenresResponseSchema,
+  type BookDetailItem,
+  type BookDetailResponse,
   type BookGenreItem,
   type BookMutationResponseData,
+  bookDetailItemSchema,
+  bookDetailResponseSchema,
   bookGenreItemSchema,
+  type CatalogBookItem,
+  type CatalogBooksResponse,
   type CreateGenreInput,
   type CreateGenreResponseData,
+  catalogBookItemSchema,
+  catalogBooksResponseSchema,
   createGenreInputSchema,
   type DeleteGenreResponseData,
   type GenreItem,
@@ -49,6 +65,58 @@ export const activeGenresResponseSchema = z.object({
 });
 
 export type ActiveGenresResponse = z.infer<typeof activeGenresResponseSchema>;
+
+export const catalogBooksQuerySchema = z.object({
+  q: z.string().optional(),
+  author: z.string().optional(),
+  genre: z
+    .string()
+    .optional()
+    .refine((val) => val === undefined || val === '' || UUID_REGEX.test(val), {
+      message: 'Genre ID tidak valid',
+    })
+    .transform((val) => (val === '' ? undefined : val)),
+  recommends: z
+    .preprocess(
+      (val) => {
+        if (val === undefined || val === '') return false;
+        if (val === 'true' || val === true) return true;
+        if (val === 'false' || val === false) return false;
+        return val;
+      },
+      z.boolean({ message: 'Parameter recommends tidak valid' }),
+    )
+    .default(false),
+  page: z
+    .preprocess(
+      (val) => {
+        if (val === undefined || val === '') return 1;
+        const num = Number(val);
+        return Number.isNaN(num) ? val : num;
+      },
+      z
+        .number({ message: 'Permintaan tidak valid.' })
+        .int({ message: 'Permintaan tidak valid.' })
+        .min(1, { message: 'Permintaan tidak valid.' }),
+    )
+    .default(1),
+  limit: z
+    .preprocess(
+      (val) => {
+        if (val === undefined || val === '') return 10;
+        const num = Number(val);
+        return Number.isNaN(num) ? val : num;
+      },
+      z
+        .number({ message: 'Permintaan tidak valid.' })
+        .int({ message: 'Permintaan tidak valid.' })
+        .min(1, { message: 'Permintaan tidak valid.' })
+        .max(50, { message: 'Permintaan tidak valid.' }),
+    )
+    .default(10),
+});
+
+export type CatalogBooksQuery = z.infer<typeof catalogBooksQuerySchema>;
 
 export const adminBooksQuerySchema = z.object({
   q: z.string().optional(),

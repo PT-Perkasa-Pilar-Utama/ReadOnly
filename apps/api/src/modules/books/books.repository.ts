@@ -14,6 +14,7 @@ import {
   type GenreItem,
   type GenreStatus,
   type PaginatedResponse,
+  UUID_REGEX,
 } from '@readonly/shared';
 import {
   and,
@@ -109,6 +110,7 @@ export interface BooksRepository {
     authors: string[];
     total: number;
   }>;
+  findRecommendations(userId: string): Promise<BookRecordWithDetails[]>;
   findBookById(id: string): Promise<BookRecordWithDetails | null>;
   createBook(params: CreateBookParams): Promise<{ id: string }>;
   updateBook(id: string, params: UpdateBookParams): Promise<boolean>;
@@ -333,6 +335,114 @@ export class DrizzleBooksRepository implements BooksRepository {
     }));
 
     return { data, authors, total };
+  }
+
+  async findRecommendations(userId: string): Promise<BookRecordWithDetails[]> {
+    let memberGenreIds: string[] = [];
+    if (userId && UUID_REGEX.test(userId)) {
+      const userGenreRows = await this.db
+        .select({ genreId: userGenres.genreId })
+        .from(userGenres)
+        .where(eq(userGenres.userId, userId));
+      memberGenreIds = userGenreRows.map((r) => r.genreId);
+    }
+
+    const highRatingSubquery = this.db
+      .select({ bookId: ratings.bookId })
+      .from(ratings)
+      .groupBy(ratings.bookId)
+      .having(sql`avg(${ratings.score}) > 3`);
+
+    const conditions = [isNull(books.deletedAt)];
+
+    if (memberGenreIds.length > 0) {
+      const memberGenreBooksSubquery = this.db
+        .select({ bookId: bookGenres.bookId })
+        .from(bookGenres)
+        .where(inArray(bookGenres.genreId, memberGenreIds));
+
+      const matchCondition = or(
+        inArray(books.id, memberGenreBooksSubquery),
+        inArray(books.id, highRatingSubquery),
+      );
+      if (matchCondition) {
+        conditions.push(matchCondition);
+      }
+    } else {
+      conditions.push(inArray(books.id, highRatingSubquery));
+    }
+
+    const bookRows = await this.db
+      .select()
+      .from(books)
+      .where(and(...conditions))
+      .orderBy(
+        sql`(SELECT avg(${ratings.score}) FROM ${ratings} WHERE ${ratings.bookId} = ${books.id}) DESC NULLS LAST`,
+        desc(books.createdAt),
+        desc(books.id),
+      )
+      .limit(6);
+
+    if (bookRows.length === 0) {
+      return [];
+    }
+
+    const bookIds = bookRows.map((b) => b.id);
+
+    const bookGenreRows = await this.db
+      .select({
+        bookId: bookGenres.bookId,
+        genreId: genres.id,
+        genreName: genres.name,
+        genreStatus: genres.status,
+      })
+      .from(bookGenres)
+      .innerJoin(genres, eq(bookGenres.genreId, genres.id))
+      .where(inArray(bookGenres.bookId, bookIds))
+      .orderBy(asc(genres.name));
+
+    const genresByBookId = new Map<
+      string,
+      Array<{ id: string; name: string; status: GenreStatus }>
+    >();
+    for (const bg of bookGenreRows) {
+      const list = genresByBookId.get(bg.bookId) ?? [];
+      list.push({
+        id: bg.genreId,
+        name: bg.genreName,
+        status: bg.genreStatus,
+      });
+      genresByBookId.set(bg.bookId, list);
+    }
+
+    const ratingRows = await this.db
+      .select({
+        bookId: ratings.bookId,
+        average: sql<number>`round(avg(${ratings.score})::numeric, 1)::float`,
+      })
+      .from(ratings)
+      .where(inArray(ratings.bookId, bookIds))
+      .groupBy(ratings.bookId);
+
+    const ratingByBookId = new Map<string, number>();
+    for (const r of ratingRows) {
+      ratingByBookId.set(r.bookId, Number(r.average));
+    }
+
+    return bookRows.map((b) => ({
+      id: b.id,
+      title: b.title,
+      author: b.author,
+      publisher: b.publisher,
+      publicationYear: b.publicationYear,
+      synopsis: b.synopsis,
+      availableCount: b.availableCount,
+      coverPath: b.coverPath,
+      deletedAt: b.deletedAt,
+      createdAt: b.createdAt,
+      genres: genresByBookId.get(b.id) ?? [],
+      averageRating: ratingByBookId.get(b.id) ?? null,
+    }));
   }
 
   async findBookById(id: string): Promise<BookRecordWithDetails | null> {
@@ -1053,6 +1163,114 @@ export class InMemoryBooksRepository implements BooksRepository {
     });
 
     return { data, authors, total };
+  }
+
+  async findRecommendations(userId: string): Promise<BookRecordWithDetails[]> {
+    const memberGenreIds = this.userGenreRecords
+      .filter((ug) => ug.userId.toLowerCase() === userId.toLowerCase())
+      .map((ug) => ug.genreId.toLowerCase());
+    const memberGenreSet = new Set(memberGenreIds);
+
+    const activeBooks = this.bookRecords.filter((b) => b.deletedAt === null);
+
+    const genreLookup = new Map<string, GenreSeedRecord>();
+    for (const g of this.genreRecords) {
+      genreLookup.set(g.id.toLowerCase(), g);
+    }
+
+    const booksWithDetails = activeBooks.map((book) => {
+      const bookRatings = this.ratingRecords.filter(
+        (r) => r.bookId === book.id,
+      );
+      const avgRating =
+        bookRatings.length > 0
+          ? Number(
+              (
+                bookRatings.reduce((sum, r) => sum + r.score, 0) /
+                bookRatings.length
+              ).toFixed(1),
+            )
+          : null;
+
+      const bookGenreIds = this.bookGenreRecords
+        .filter((bg) => bg.bookId.toLowerCase() === book.id.toLowerCase())
+        .map((bg) => bg.genreId.toLowerCase());
+
+      const hasMatchingGenre =
+        memberGenreSet.size > 0 &&
+        bookGenreIds.some((gid) => memberGenreSet.has(gid));
+
+      const hasHighRating = avgRating !== null && avgRating > 3;
+
+      const qualifies = hasMatchingGenre || hasHighRating;
+
+      const bookGenresList = this.bookGenreRecords
+        .filter((bg) => bg.bookId.toLowerCase() === book.id.toLowerCase())
+        .map((bg) => {
+          const g = genreLookup.get(bg.genreId.toLowerCase());
+          return {
+            id: bg.genreId,
+            name: g?.name ?? 'Unknown',
+            status: g?.status ?? 'active',
+          };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+      return {
+        book: {
+          ...book,
+          genres: bookGenresList,
+          averageRating: avgRating,
+        },
+        qualifies,
+        avgRating,
+      };
+    });
+
+    const matching = booksWithDetails.filter((item) => item.qualifies);
+
+    matching.sort((a, b) => {
+      if (a.avgRating !== null && b.avgRating !== null) {
+        if (b.avgRating !== a.avgRating) {
+          return b.avgRating - a.avgRating;
+        }
+      } else if (a.avgRating !== null && b.avgRating === null) {
+        return -1;
+      } else if (a.avgRating === null && b.avgRating !== null) {
+        return 1;
+      }
+
+      const timeA = a.book.createdAt.getTime();
+      const timeB = b.book.createdAt.getTime();
+      if (timeB !== timeA) {
+        return timeB - timeA;
+      }
+
+      return b.book.id.localeCompare(a.book.id);
+    });
+
+    return matching.slice(0, 6).map((item) => item.book);
+  }
+
+  addUserGenre(userId: string, genreId: string): void {
+    this.userGenreRecords.push({ userId, genreId });
+  }
+
+  setUserGenres(userId: string, genreIds: string[]): void {
+    for (let i = this.userGenreRecords.length - 1; i >= 0; i--) {
+      if (
+        this.userGenreRecords[i].userId.toLowerCase() === userId.toLowerCase()
+      ) {
+        this.userGenreRecords.splice(i, 1);
+      }
+    }
+    for (const genreId of genreIds) {
+      this.userGenreRecords.push({ userId, genreId });
+    }
+  }
+
+  addRating(bookId: string, score: number): void {
+    this.ratingRecords.push({ bookId, score });
   }
 
   async findBookById(id: string): Promise<BookRecordWithDetails | null> {

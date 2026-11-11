@@ -1856,4 +1856,510 @@ describe('books module - Master Genre CRUD & status (BE-S1-04 / US-11)', () => {
       message: API_MESSAGES.GENRE_IN_USE,
     });
   });
+
+  describe('Catalog Home & Detail Buku (BE-S2-01 / US-07, US-08)', () => {
+    it('enforces authentication on GET /books and GET /books/:id (401 unauthenticated)', async () => {
+      const { app } = createTestHarness();
+
+      const unauthCatalog = await app.handle(
+        new Request('http://localhost/api/v1/books'),
+      );
+      expect(unauthCatalog.status).toBe(401);
+      const unauthCatalogBody = (await unauthCatalog.json()) as {
+        code: string;
+      };
+      expect(unauthCatalogBody.code).toBe('session_not_found');
+
+      const unauthDetail = await app.handle(
+        new Request(`http://localhost/api/v1/books/${QA_IDS.books.bookA}`),
+      );
+      expect(unauthDetail.status).toBe(401);
+      const unauthDetailBody = (await unauthDetail.json()) as { code: string };
+      expect(unauthDetailBody.code).toBe('session_not_found');
+    });
+
+    it('GET /books lists active books with pagination, authors, and availability (AC-07.01, AC-07.02)', async () => {
+      const { app, getMemberHeaders } = createTestHarness();
+      const memberHeaders = await getMemberHeaders();
+
+      const response = await app.handle(
+        new Request('http://localhost/api/v1/books', {
+          headers: memberHeaders,
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as {
+        data: Array<{
+          id: string;
+          title: string;
+          author: string;
+          publisher: string;
+          publication_year: number;
+          synopsis?: string;
+          cover_url: string;
+          genres: Array<{ id: string; name: string; status: string }>;
+          available_count: number;
+          is_available: boolean;
+          availability_label: string;
+          average_rating: number | null;
+        }>;
+        recommendations: unknown[];
+        authors: string[];
+        pagination: {
+          page: number;
+          limit: number;
+          total: number;
+          totalPages: number;
+        };
+      };
+
+      expect(body.data.length).toBe(5);
+      expect(body.pagination).toEqual({
+        page: 1,
+        limit: 10,
+        total: 5,
+        totalPages: 1,
+      });
+      expect(body.recommendations).toEqual([]);
+      expect(body.authors.length).toBeGreaterThan(0);
+
+      // Verify synopsis is not included in catalog listing
+      expect(body.data[0].synopsis).toBeUndefined();
+
+      // Verify availability labels (AC-07.02)
+      const availableBook = body.data.find((b) => b.available_count > 0);
+      expect(availableBook).toBeDefined();
+      expect(availableBook?.is_available).toBe(true);
+      expect(availableBook?.availability_label).toBe('Tersedia');
+
+      const unavailableBook = body.data.find((b) => b.available_count === 0);
+      expect(unavailableBook).toBeDefined();
+      expect(unavailableBook?.is_available).toBe(false);
+      expect(unavailableBook?.availability_label).toBe('Tidak Tersedia');
+
+      // Verify sorting is createdAt DESC
+      const dates = body.data.map((b) => {
+        if (b.id === QA_IDS.books.bookA)
+          return new Date('2026-11-01T00:00:00Z').getTime();
+        if (b.id === QA_IDS.books.bookB)
+          return new Date('2026-11-02T00:00:00Z').getTime();
+        if (b.id === QA_IDS.books.bookC)
+          return new Date('2026-11-03T00:00:00Z').getTime();
+        if (b.id === QA_IDS.books.bookD)
+          return new Date('2026-11-04T00:00:00Z').getTime();
+        if (b.id === QA_IDS.books.bookE)
+          return new Date('2026-11-05T00:00:00Z').getTime();
+        return 0;
+      });
+      for (let i = 0; i < dates.length - 1; i++) {
+        expect(dates[i]).toBeGreaterThanOrEqual(dates[i + 1]);
+      }
+    });
+
+    it('GET /books filters by author and genre (AC-07.02)', async () => {
+      const { app, getMemberHeaders } = createTestHarness();
+      const memberHeaders = await getMemberHeaders();
+
+      // Filter by author
+      const authorRes = await app.handle(
+        new Request(
+          'http://localhost/api/v1/books?author=Pramoedya%20Ananta%20Toer',
+          {
+            headers: memberHeaders,
+          },
+        ),
+      );
+      expect(authorRes.status).toBe(200);
+      const authorBody = await authorRes.json();
+      expect(authorBody.data.length).toBe(1);
+      expect(authorBody.data[0].id).toBe(QA_IDS.books.bookA);
+
+      // Filter by genre
+      const genreRes = await app.handle(
+        new Request(
+          `http://localhost/api/v1/books?genre=${QA_IDS.genres.teknologi}`,
+          {
+            headers: memberHeaders,
+          },
+        ),
+      );
+      expect(genreRes.status).toBe(200);
+      const genreBody = await genreRes.json();
+      expect(genreBody.data.length).toBe(1);
+      expect(genreBody.data[0].id).toBe(QA_IDS.books.bookB);
+
+      // Combined author and genre
+      const combinedRes = await app.handle(
+        new Request(
+          `http://localhost/api/v1/books?author=Pramoedya%20Ananta%20Toer&genre=${QA_IDS.genres.fiksi}`,
+          { headers: memberHeaders },
+        ),
+      );
+      expect(combinedRes.status).toBe(200);
+      const combinedBody = await combinedRes.json();
+      expect(combinedBody.data.length).toBe(1);
+      expect(combinedBody.data[0].id).toBe(QA_IDS.books.bookA);
+    });
+
+    it('GET /books searches substring on title, author, or genre name (AC-07.03)', async () => {
+      const { app, getMemberHeaders } = createTestHarness();
+      const memberHeaders = await getMemberHeaders();
+
+      // Search title
+      const titleRes = await app.handle(
+        new Request('http://localhost/api/v1/books?q=bumi', {
+          headers: memberHeaders,
+        }),
+      );
+      expect(titleRes.status).toBe(200);
+      const titleBody = await titleRes.json();
+      expect(titleBody.data.length).toBe(1);
+      expect(titleBody.data[0].id).toBe(QA_IDS.books.bookA);
+
+      // Search author
+      const authorRes = await app.handle(
+        new Request('http://localhost/api/v1/books?q=harari', {
+          headers: memberHeaders,
+        }),
+      );
+      expect(authorRes.status).toBe(200);
+      const authorBody = await authorRes.json();
+      expect(authorBody.data.length).toBe(1);
+      expect(authorBody.data[0].id).toBe(QA_IDS.books.bookD);
+
+      // Search genre name
+      const genreRes = await app.handle(
+        new Request('http://localhost/api/v1/books?q=bisnis', {
+          headers: memberHeaders,
+        }),
+      );
+      expect(genreRes.status).toBe(200);
+      const genreBody = await genreRes.json();
+      expect(genreBody.data.length).toBe(1);
+      expect(genreBody.data[0].id).toBe(QA_IDS.books.bookC);
+
+      // Search no matches
+      const noneRes = await app.handle(
+        new Request('http://localhost/api/v1/books?q=tidakada', {
+          headers: memberHeaders,
+        }),
+      );
+      expect(noneRes.status).toBe(200);
+      const noneBody = await noneRes.json();
+      expect(noneBody.data.length).toBe(0);
+      expect(noneBody.pagination.total).toBe(0);
+    });
+
+    it('GET /books rejects invalid query parameters with 422', async () => {
+      const { app, getMemberHeaders } = createTestHarness();
+      const memberHeaders = await getMemberHeaders();
+
+      const limitRes = await app.handle(
+        new Request('http://localhost/api/v1/books?limit=100', {
+          headers: memberHeaders,
+        }),
+      );
+      expect(limitRes.status).toBe(422);
+
+      const pageRes = await app.handle(
+        new Request('http://localhost/api/v1/books?page=0', {
+          headers: memberHeaders,
+        }),
+      );
+      expect(pageRes.status).toBe(422);
+
+      const genreRes = await app.handle(
+        new Request('http://localhost/api/v1/books?genre=invalid-uuid', {
+          headers: memberHeaders,
+        }),
+      );
+      expect(genreRes.status).toBe(422);
+
+      const recRes = await app.handle(
+        new Request('http://localhost/api/v1/books?recommends=bukan-boolean', {
+          headers: memberHeaders,
+        }),
+      );
+      expect(recRes.status).toBe(422);
+    });
+
+    it('GET /books returns recommendations for member preferences OR rating > 3 (AC-07.01, Q-27, Q-28)', async () => {
+      const { app, getMemberHeaders } = createTestHarness();
+      const memberHeaders = await getMemberHeaders();
+
+      // member1 preferences: fiksi, teknologi
+      // bookA: fiksi (matching), rating 4.5
+      // bookB: teknologi (matching), rating 4.0
+      // bookC: bisnis (no match), rating null
+      // bookD: sejarah (no match), rating null
+      // bookE: fiksi (matching), rating null
+      const res = await app.handle(
+        new Request('http://localhost/api/v1/books?recommends=true', {
+          headers: memberHeaders,
+        }),
+      );
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.recommendations.length).toBe(3);
+
+      // Ordered by average_rating DESC NULLS LAST, then createdAt DESC
+      const recIds = body.recommendations.map((b: { id: string }) => b.id);
+      expect(recIds[0]).toBe(QA_IDS.books.bookA); // rating 4.5
+      expect(recIds[1]).toBe(QA_IDS.books.bookB); // rating 4.0
+      expect(recIds[2]).toBe(QA_IDS.books.bookE); // null rating, matching genre
+
+      // Verify recommendations items have correct structure
+      const firstRec = body.recommendations[0];
+      expect(firstRec.id).toBe(QA_IDS.books.bookA);
+      expect(firstRec.average_rating).toBe(4.5);
+      expect(firstRec.is_available).toBe(true);
+      expect(firstRec.availability_label).toBe('Tersedia');
+    });
+
+    it('GET /books recommends books with rating > 3 even when member has no genre preferences', async () => {
+      const { app, booksRepository, getMemberHeaders } = createTestHarness();
+      const memberHeaders = await getMemberHeaders();
+
+      // Clear genre preferences for member1
+      booksRepository.setUserGenres(QA_IDS.users.member1, []);
+
+      const res = await app.handle(
+        new Request('http://localhost/api/v1/books?recommends=true', {
+          headers: memberHeaders,
+        }),
+      );
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      // Only bookA (4.5) and bookB (4.0) have rating > 3
+      expect(body.recommendations.length).toBe(2);
+      const recIds = body.recommendations.map((b: { id: string }) => b.id);
+      expect(recIds).toEqual([QA_IDS.books.bookA, QA_IDS.books.bookB]);
+    });
+
+    it('GET /books returns empty recommendations when no books match (Q-27, Q-28)', async () => {
+      // Test using a harness where no ratings > 3 exist and user genre is unused
+      const noMatchHarness = createTestHarness(
+        (repo: InMemoryBooksRepository) => {
+          (repo as unknown as { ratingRecords: unknown[] }).ratingRecords = [];
+          repo.setUserGenres(QA_IDS.users.member1, [QA_IDS.genres.unused]);
+        },
+      );
+      const noMatchMemberHeaders = await noMatchHarness.getMemberHeaders();
+
+      const res = await noMatchHarness.app.handle(
+        new Request('http://localhost/api/v1/books?recommends=true', {
+          headers: noMatchMemberHeaders,
+        }),
+      );
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.recommendations).toEqual([]);
+    });
+
+    it('GET /books respects maximum limit of 6 recommendations', async () => {
+      const harness = createTestHarness((repo: InMemoryBooksRepository) => {
+        // Add additional books to exceed 6 recommendations
+        for (let i = 1; i <= 8; i++) {
+          const id = `00000000-0000-4000-8002-00000000009${i}`;
+          (
+            repo as unknown as {
+              bookRecords: Array<Record<string, unknown>>;
+            }
+          ).bookRecords.push({
+            id,
+            title: `Book Extra ${i}`,
+            author: 'Author Extra',
+            publisher: 'Publisher Extra',
+            publicationYear: 2024,
+            synopsis: 'Extra synopsis',
+            availableCount: 2,
+            coverPath: null,
+            deletedAt: null,
+            createdAt: new Date(`2026-11-0${i}T00:00:00Z`),
+          });
+          // Tag with fiksi (member1 preferred genre)
+          repo.addUserGenre(id, QA_IDS.genres.fiksi);
+          (
+            repo as unknown as {
+              bookGenreRecords: Array<{ bookId: string; genreId: string }>;
+            }
+          ).bookGenreRecords.push({
+            bookId: id,
+            genreId: QA_IDS.genres.fiksi,
+          });
+        }
+      });
+
+      const memberHeaders = await harness.getMemberHeaders();
+      const res = await harness.app.handle(
+        new Request('http://localhost/api/v1/books?recommends=true', {
+          headers: memberHeaders,
+        }),
+      );
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.recommendations.length).toBe(6);
+    });
+
+    it('GET /books/:id returns book detail with synopsis for member and admin (AC-07.04, AC-08.04)', async () => {
+      const { app, getMemberHeaders, getAdminHeaders } = createTestHarness();
+      const memberHeaders = await getMemberHeaders();
+      const adminHeaders = await getAdminHeaders();
+
+      // Member can view detail
+      const memberRes = await app.handle(
+        new Request(`http://localhost/api/v1/books/${QA_IDS.books.bookA}`, {
+          headers: memberHeaders,
+        }),
+      );
+      expect(memberRes.status).toBe(200);
+      const memberBody = await memberRes.json();
+      expect(memberBody.data.id).toBe(QA_IDS.books.bookA);
+      expect(memberBody.data.title).toBe('Bumi Manusia');
+      expect(memberBody.data.synopsis).toBeDefined();
+      expect(memberBody.data.available_count).toBe(3);
+      expect(memberBody.data.is_available).toBe(true);
+      expect(memberBody.data.availability_label).toBe('Tersedia');
+      expect(memberBody.data.average_rating).toBe(4.5);
+
+      // Book with available_count === 0 has is_available: false and "Tidak Tersedia" (AC-08.04)
+      const unavailableRes = await app.handle(
+        new Request(`http://localhost/api/v1/books/${QA_IDS.books.bookE}`, {
+          headers: memberHeaders,
+        }),
+      );
+      expect(unavailableRes.status).toBe(200);
+      const unavailBody = await unavailableRes.json();
+      expect(unavailBody.data.available_count).toBe(0);
+      expect(unavailBody.data.is_available).toBe(false);
+      expect(unavailBody.data.availability_label).toBe('Tidak Tersedia');
+
+      // Admin can also view detail
+      const adminRes = await app.handle(
+        new Request(`http://localhost/api/v1/books/${QA_IDS.books.bookA}`, {
+          headers: adminHeaders,
+        }),
+      );
+      expect(adminRes.status).toBe(200);
+    });
+
+    it('GET /books/:id returns 404 for non-existent, invalid UUID, or soft-deleted book', async () => {
+      const { app, getMemberHeaders } = createTestHarness();
+      const memberHeaders = await getMemberHeaders();
+
+      // Non-existent UUID
+      const notFoundRes = await app.handle(
+        new Request(
+          'http://localhost/api/v1/books/00000000-0000-4000-8002-999999999999',
+          {
+            headers: memberHeaders,
+          },
+        ),
+      );
+      expect(notFoundRes.status).toBe(404);
+      const notFoundBody = await notFoundRes.json();
+      expect(notFoundBody.code).toBe('not_found');
+      expect(notFoundBody.message).toBe('Buku tidak ditemukan.');
+
+      // Invalid UUID format
+      const invalidUuidRes = await app.handle(
+        new Request('http://localhost/api/v1/books/invalid-uuid-format', {
+          headers: memberHeaders,
+        }),
+      );
+      expect(invalidUuidRes.status).toBe(404);
+      const invalidUuidBody = await invalidUuidRes.json();
+      expect(invalidUuidBody.code).toBe('not_found');
+      expect(invalidUuidBody.message).toBe('Buku tidak ditemukan.');
+    });
+
+    it('excludes soft-deleted books from catalog, detail, and recommendations', async () => {
+      const { app, getAdminHeaders, getMemberHeaders } = createTestHarness();
+      const adminHeaders = await getAdminHeaders();
+      const memberHeaders = await getMemberHeaders();
+
+      // Soft delete bookB (has only returned loans)
+      const deleteRes = await app.handle(
+        new Request(
+          `http://localhost/api/v1/admin/books/${QA_IDS.books.bookB}`,
+          {
+            method: 'DELETE',
+            headers: adminHeaders,
+          },
+        ),
+      );
+      expect(deleteRes.status).toBe(200);
+
+      // GET /books excludes bookB from data
+      const catalogRes = await app.handle(
+        new Request('http://localhost/api/v1/books?recommends=true', {
+          headers: memberHeaders,
+        }),
+      );
+      expect(catalogRes.status).toBe(200);
+      const catalogBody = await catalogRes.json();
+      const catalogIds = catalogBody.data.map((b: { id: string }) => b.id);
+      expect(catalogIds.includes(QA_IDS.books.bookB)).toBe(false);
+
+      // Recommendations exclude bookB even though bookB has rating 4.0
+      const recIds = catalogBody.recommendations.map(
+        (b: { id: string }) => b.id,
+      );
+      expect(recIds.includes(QA_IDS.books.bookB)).toBe(false);
+
+      // GET /books/:id returns 404 for soft-deleted book
+      const detailRes = await app.handle(
+        new Request(`http://localhost/api/v1/books/${QA_IDS.books.bookB}`, {
+          headers: memberHeaders,
+        }),
+      );
+      expect(detailRes.status).toBe(404);
+    });
+
+    it('DrizzleBooksRepository.findRecommendations handles empty and non-empty user genres', async () => {
+      const selectCalls: unknown[] = [];
+      const fakeDb = {
+        select(fields: unknown) {
+          selectCalls.push(fields);
+          return {
+            from() {
+              return {
+                where() {
+                  return Object.assign(Promise.resolve([]), {
+                    orderBy() {
+                      return {
+                        limit() {
+                          return Promise.resolve([]);
+                        },
+                      };
+                    },
+                  });
+                },
+                groupBy() {
+                  return {
+                    having() {
+                      return [];
+                    },
+                  };
+                },
+              };
+            },
+          };
+        },
+      } as unknown as Database;
+
+      const repo = new DrizzleBooksRepository(fakeDb);
+      const recs = await repo.findRecommendations(QA_IDS.users.member1);
+      expect(recs).toEqual([]);
+
+      // Test with invalid UUID
+      const invalidRecs = await repo.findRecommendations('not-a-uuid');
+      expect(invalidRecs).toEqual([]);
+    });
+  });
 });

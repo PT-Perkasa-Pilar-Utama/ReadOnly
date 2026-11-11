@@ -63,8 +63,8 @@ Base: `/api/v1`
 | Add Admin user | POST /admin/users | admin | OK |
 | Edit user data | PATCH /admin/users/:id | admin | OK |
 | Change user status | PATCH /admin/users/:id/status | admin | OK |
-| Catalog Home | GET /books | login | TODO |
-| Book detail | GET /books/:id | login | TODO |
+| Catalog Home | GET /books | login | OK |
+| Book detail | GET /books/:id | login | OK |
 | Admin books list | GET /admin/books | admin | OK |
 | Add book | POST /admin/books | admin | OK |
 | Edit book | PATCH /admin/books/:id | admin | OK |
