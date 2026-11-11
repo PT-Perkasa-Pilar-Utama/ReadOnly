@@ -157,4 +157,3 @@ export class InMemoryJobsRepository implements JobsRepository {
     return this.activeLocks.has(lockKey);
   }
 }
-
