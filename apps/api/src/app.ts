@@ -21,6 +21,13 @@ import {
 import { createBooksRoutes } from './modules/books/books.routes';
 import { BooksService } from './modules/books/books.service';
 import {
+  DrizzleJobsRepository,
+  InMemoryJobsRepository,
+  type JobsRepository,
+} from './modules/jobs/jobs.repository';
+import { createJobsRoutes } from './modules/jobs/jobs.routes';
+import { JobsService } from './modules/jobs/jobs.service';
+import {
   DrizzleLoansRepository,
   InMemoryLoansRepository,
   type LoansRepository,
@@ -52,6 +59,10 @@ export interface AppOptions {
   authService?: AuthService;
   loansRepository?: LoansRepository;
   loansService?: LoansService;
+  jobsRepository?: JobsRepository | undefined;
+  jobsService?: JobsService | undefined;
+  enableScheduler?: boolean | undefined;
+  autoCatchUp?: boolean | undefined;
   registerRateLimiter?: RateLimiter;
   registerRateLimitMax?: number;
   registerRateLimitWindowMs?: number;
@@ -253,6 +264,28 @@ export function createApp(options?: AppOptions) {
       clock,
     });
 
+  const jobsRepository =
+    options?.jobsRepository ??
+    (options?.db
+      ? new DrizzleJobsRepository(options.db)
+      : new InMemoryJobsRepository());
+
+  const jobsService =
+    options?.jobsService ??
+    new JobsService({
+      repository: jobsRepository,
+      loansRepository,
+      loansService,
+      clock,
+      ...(options?.autoCatchUp !== undefined
+        ? { autoCatchUp: options.autoCatchUp }
+        : {}),
+    });
+
+  if (options?.enableScheduler) {
+    jobsService.startScheduler();
+  }
+
   const healthChecks = resolveHealthChecks(options);
 
   return new Elysia({ prefix: API_PREFIX })
@@ -271,5 +304,6 @@ export function createApp(options?: AppOptions) {
     .use(createSystemRoutes(healthChecks))
     .use(createBooksRoutes(booksService, authService))
     .use(createAuthRoutes(authService, registerRateLimiter, loginRateLimiter))
-    .use(createLoansRoutes(loansService, authService));
+    .use(createLoansRoutes(loansService, authService))
+    .use(createJobsRoutes(jobsService, clock));
 }

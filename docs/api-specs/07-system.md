@@ -83,4 +83,4 @@ Base: `/api/v1`
 | Dashboard summary | GET /admin/dashboard/summary | admin | TODO |
 | Health | GET /health | publik | OK |
 | Reset state | POST /admin/reset-state | non-prod | TODO |
-| Run job | POST /admin/jobs/run | non-prod | TODO |
+| Run job | POST /admin/jobs/run | non-prod | OK |

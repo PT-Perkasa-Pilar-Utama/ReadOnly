@@ -106,6 +106,17 @@ export function createNotFoundError(
   });
 }
 
+export function createInvalidStateTransitionError(
+  message = 'Transisi status tidak valid.',
+): AppError {
+  return new AppError({
+    statusCode: 422,
+    error: 'Unprocessable Entity',
+    code: 'invalid_state_transition',
+    message,
+  });
+}
+
 export function createGenreInUseError(
   message: string = API_MESSAGES.GENRE_IN_USE,
 ): AppError {

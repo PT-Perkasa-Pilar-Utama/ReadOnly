@@ -681,4 +681,63 @@ describe('loans module - DrizzleLoansRepository', () => {
     );
     expect(result).toBeNull();
   });
+
+  it('DrizzleLoansRepository findOverdueCandidateLoans and transitionToOverdue interact with database correctly', async () => {
+    let updateCalled = false;
+    let eventInserted = false;
+    let notifInserted = false;
+
+    const fakeDb = {
+      select: () => ({
+        from: () => ({
+          innerJoin: () => ({
+            where: () => ({
+              orderBy: async () => [],
+            }),
+          }),
+        }),
+      }),
+      transaction: async (fn: (tx: unknown) => unknown) => {
+        const fakeTx = {
+          update: () => ({
+            set: () => ({
+              where: async () => {
+                updateCalled = true;
+              },
+            }),
+          }),
+          insert: () => ({
+            values: () => {
+              eventInserted = true;
+              return {
+                onConflictDoNothing: async () => {
+                  notifInserted = true;
+                },
+              };
+            },
+          }),
+        };
+        return await fn(fakeTx);
+      },
+    } as unknown as Database;
+
+    const repo = new DrizzleLoansRepository(fakeDb);
+
+    const candidates = await repo.findOverdueCandidateLoans('2026-11-09');
+    expect(candidates).toEqual([]);
+
+    await repo.transitionToOverdue({
+      loanId: '00000000-0000-4000-8003-000000000002',
+      lateDays: 1,
+      fineAmount: 2000,
+      now: new Date(),
+      bookTitle: 'Test Book',
+      userId: '00000000-0000-4000-8000-000000000002',
+      dueDate: '2026-11-08',
+    });
+
+    expect(updateCalled).toBe(true);
+    expect(eventInserted).toBe(true);
+    expect(notifInserted).toBe(true);
+  });
 });
