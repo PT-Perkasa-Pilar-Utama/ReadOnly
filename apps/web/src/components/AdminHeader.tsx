@@ -32,12 +32,6 @@ const ADMIN_NAVIGATION = [
     href: '/admin/genres',
     available: true,
   },
-  {
-    label: 'Management User',
-    section: 'users',
-    href: '/admin/users',
-    available: true,
-  },
   // AC-12.01: Management User dapat dibuka dari seluruh halaman Admin.
   {
     label: 'Management User',
@@ -48,7 +42,7 @@ const ADMIN_NAVIGATION = [
 ] as const;
 
 interface AdminHeaderProps {
-  activeSection: AdminSection;
+  activeSection?: AdminSection | undefined;
 }
 
 export function AdminHeader(props: AdminHeaderProps) {
@@ -76,7 +70,7 @@ export function AdminHeader(props: AdminHeaderProps) {
     <header class="admin-header">
       <div class="admin-header__inner">
         <a
-          class="admin-header__brand"
+          class="wordmark admin-header__brand"
           href="/"
           aria-label="ReadOnly, Dashboard"
         >

@@ -12,8 +12,33 @@
   font-weight: 100 900;
   font-display: swap;
 }
+@font-face {
+  font-family: 'Gelasio';
+  src: url('/fonts/gelasio.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Inter';
+  src: url('/fonts/inter.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
 :root {
-  font-family: 'Raleway', Arial, sans-serif;
+  --font-ui: 'Raleway', Arial, sans-serif;
+  --font-heading: 'Gelasio', Georgia, serif;
+  --font-auth: 'Cormorant Garamond', Georgia, serif;
+  --font-book-status: 'Inter', Arial, sans-serif;
+  /* AC-01.01, AC-02.01, AC-03.01, AC-07.01, AC-10.01, AC-12.01:
+     radii follow the SVG outer edges, including strokes. */
+  --radius-control: 12px;
+  --radius-card: 12px;
+  --radius-modal: 10px;
+  --radius-badge: 5px;
+  font-family: var(--font-ui);
+  font-weight: 500;
   color: #302a2b;
   background: #f7f1e8;
   font-synthesis: none;
@@ -43,7 +68,8 @@ textarea {
 button,
 a,
 input,
-select {
+select,
+textarea {
   -webkit-tap-highlight-color: transparent;
 }
 button,
@@ -64,7 +90,8 @@ a {
 button,
 a,
 input,
-select {
+select,
+textarea {
   outline-offset: 4px;
 }
 :focus-visible {
@@ -89,16 +116,16 @@ p {
 }
 h1,
 h2 {
-  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-family: var(--font-heading);
   font-weight: 700;
   line-height: 1.15;
 }
 h1 {
-  font-size: 36px;
+  font-size: 28px;
   margin-bottom: 10px;
 }
 h2 {
-  font-size: 32px;
+  font-size: 28px;
   margin-bottom: 10px;
 }
 h3 {
@@ -135,12 +162,13 @@ h3 {
   justify-content: center;
   gap: 9px;
   border: 1px solid var(--wine);
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   background: var(--wine);
   color: #fff;
   text-decoration: none;
   font-weight: 600;
-  font-size: 13px;
+  font-size: 14px;
+  line-height: 20px;
   padding: 10px 18px;
   min-height: 42px;
   white-space: nowrap;
@@ -190,8 +218,8 @@ h3 {
   background: #782f4010;
 }
 .wordmark {
-  font-family: 'Cormorant Garamond', Georgia, serif;
-  font-size: 29px;
+  font-family: var(--font-heading);
+  font-size: 24px;
   font-weight: 700;
   color: inherit;
   text-decoration: none;
@@ -201,15 +229,21 @@ h3 {
   display: inline-block;
   flex-shrink: 0;
 }
+.wordmark::before,
 .wordmark::after {
   content: '';
   position: absolute;
-  height: 3px;
-  bottom: 3px;
+  height: 0.22em;
+  width: calc(50% - 1px);
+  bottom: 0;
   left: 0;
-  right: 0;
   background: currentColor;
-  border-radius: 0 0 8px 8px;
+  border-radius: 0 8px 0 5px;
+}
+.wordmark::after {
+  left: auto;
+  right: 0;
+  border-radius: 8px 0 5px 0;
 }
 .demo-banner {
   background: #eee4d2;
@@ -237,7 +271,7 @@ h3 {
 }
 .auth-layout {
   display: grid;
-  grid-template-columns: minmax(360px, 42%) 1fr;
+  grid-template-columns: minmax(360px, 5fr) 7fr;
   min-height: 100vh;
 }
 .demo-banner + .auth-layout {
@@ -248,6 +282,10 @@ h3 {
   overflow: hidden;
   background: var(--wine);
   min-height: 100%;
+  color: #fff;
+  padding: 50px;
+  display: flex;
+  align-items: center;
 }
 .auth-art img {
   position: absolute;
@@ -255,6 +293,43 @@ h3 {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+.auth-art::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: #762f3dd9;
+}
+.auth-art .wordmark {
+  position: absolute;
+  top: 50px;
+  left: 50px;
+  z-index: 1;
+  font-size: 36px;
+}
+.auth-art-copy {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+}
+.auth-art-copy h2 {
+  font-family: var(--font-auth);
+  font-size: 42px;
+  line-height: 61px;
+  margin-bottom: 30px;
+}
+.auth-art-copy p {
+  color: #ebdde1;
+  font-size: 17px;
+  line-height: 25px;
+  margin-bottom: 28px;
+}
+.auth-art-copy::after {
+  content: '';
+  display: block;
+  width: 56px;
+  height: 3px;
+  background: #cba2ad;
 }
 .auth-main {
   display: flex;
@@ -267,18 +342,19 @@ h3 {
 }
 .auth-form {
   width: 100%;
-  max-width: 530px;
+  max-width: 744px;
 }
 .form-heading {
   margin-bottom: 27px;
 }
 .form-heading h1 {
-  font-size: 32px;
+  font-family: var(--font-auth);
+  font-size: 36px;
   margin-bottom: 10px;
 }
 .form-heading p {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   margin-bottom: 0;
 }
 .field {
@@ -290,7 +366,7 @@ h3 {
 }
 .field label,
 .role-filter label {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
 }
 .required-mark {
@@ -301,27 +377,36 @@ h3 {
   position: relative;
 }
 input,
-select {
+select,
+textarea {
   border: 1px solid var(--line);
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   background: #fff;
   width: 100%;
-  height: 43px;
-  padding: 10px 13px;
-  font-size: 13px;
+  height: 44px;
+  padding: 10px 17px;
+  font-size: 14px;
   color: #302a2b;
+}
+textarea {
+  height: 98px;
+  min-height: 98px;
+  resize: vertical;
 }
 input::placeholder {
   color: #938b8f;
 }
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
   border-color: var(--wine);
 }
-input[aria-invalid='true'] {
+input[aria-invalid='true'],
+textarea[aria-invalid='true'] {
   border-color: #ce626b;
 }
-input[readonly] {
+input[readonly],
+textarea[readonly] {
   background: #f3efeb;
   color: var(--muted);
   cursor: default;
@@ -329,7 +414,7 @@ input[readonly] {
 .field-error {
   display: block;
   color: #b33d4b;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.4;
   margin-top: 0;
 }
@@ -358,11 +443,11 @@ input[readonly] {
 .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 15px;
+  gap: 16px;
 }
 .auth-switch {
   text-align: center;
-  font-size: 12px;
+  font-size: 14px;
   color: var(--muted);
   margin: 16px 0 0;
 }
@@ -392,12 +477,12 @@ input[readonly] {
 }
 .genre-chip {
   border: 1px solid #e8d9dc;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   background: #f3e8e9;
   color: #706268;
   padding: 10px 15px;
-  font-size: 12px;
-  min-height: 40px;
+  font-size: 14px;
+  min-height: 44px;
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -444,12 +529,13 @@ input[readonly] {
   padding: 7px;
 }
 .app-header {
+  position: relative;
   background: var(--wine);
   color: #fff;
 }
 .header-inner {
   max-width: 1512px;
-  min-height: 86px;
+  min-height: 97px;
   padding: 15px 48px;
   margin: 0 auto;
   display: flex;
@@ -463,7 +549,7 @@ input[readonly] {
   justify-content: center;
   gap: 27px;
   flex: 1;
-  font-size: 12px;
+  font-size: 14px;
 }
 .main-nav a,
 .nav-disabled {
@@ -477,7 +563,7 @@ input[readonly] {
 }
 .main-nav a.active {
   color: #fff;
-  font-weight: 600;
+  font-weight: 700;
 }
 .main-nav a.active::after {
   content: '';
@@ -506,11 +592,11 @@ input[readonly] {
   min-width: 0;
 }
 .account-label span:first-child {
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 600;
 }
 .account-label span:last-child {
-  font-size: 11px;
+  font-size: 12px;
   overflow-wrap: anywhere;
 }
 .logout-button {
@@ -525,14 +611,14 @@ input[readonly] {
   color: #fff;
 }
 .logout-button span {
-  font-size: 11px;
+  font-size: 14px;
 }
 .header-account .icon-button:hover {
   background: #ffffff15;
 }
 .page-container {
   max-width: 1512px;
-  padding: 42px 48px 56px;
+  padding: 48px 64px 56px;
   margin: 0 auto;
   min-height: calc(100vh - 212px);
 }
@@ -549,7 +635,7 @@ input[readonly] {
 }
 .section-heading p {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   margin-bottom: 0;
 }
 .section-heading > svg {
@@ -558,13 +644,13 @@ input[readonly] {
 .book-grid {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 17px;
+  gap: 16px;
 }
 .book-card {
   background: #fff;
-  padding: 11px;
+  padding: 12px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   min-width: 0;
 }
 .book-card > a {
@@ -574,7 +660,7 @@ input[readonly] {
   aspect-ratio: 182 / 250;
   overflow: hidden;
   background: #eee9e1;
-  border-radius: 5px;
+  border-radius: 4px;
 }
 .book-cover img {
   width: 100%;
@@ -591,26 +677,25 @@ input[readonly] {
   gap: 15px;
   padding: 16px;
   color: var(--wine);
-  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-family: var(--font-heading);
   font-size: 24px;
   background: #eee4d8;
 }
 .book-card-info {
-  padding-top: 11px;
+  padding-top: 8px;
 }
 .book-card h3 {
-  font-family: 'Raleway', Arial, sans-serif;
-  font-size: 12px;
+  font-family: var(--font-ui);
+  font-size: 13px;
   font-weight: 700;
   line-height: 1.45;
-  margin: 0 0 5px;
-  min-height: 2.9em;
+  margin: 0 0 4px;
 }
 .book-author,
 .book-meta {
   color: var(--muted);
-  font-size: 10px;
-  margin-bottom: 5px;
+  font-size: 12px;
+  margin-bottom: 2px;
   line-height: 1.5;
 }
 .book-meta {
@@ -622,15 +707,15 @@ input[readonly] {
   align-items: center;
   justify-content: space-between;
   gap: 4px;
-  margin-top: 9px;
+  margin-top: 4px;
 }
 .badge {
-  font-family: Arial, sans-serif;
+  font-family: var(--font-ui);
   display: inline-block;
-  border-radius: 4px;
-  font-size: 10px;
+  border-radius: var(--radius-badge);
+  font-size: 12px;
   line-height: 1.4;
-  padding: 4px 6px;
+  padding: 3px 6px;
   white-space: nowrap;
 }
 .available {
@@ -645,13 +730,17 @@ input[readonly] {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 10px;
+  font-family: var(--font-book-status);
+  font-size: 12px;
   text-decoration: none;
-  font-weight: 650;
+  font-weight: 600;
   white-space: nowrap;
 }
 .book-card-bottom a:hover {
   text-decoration: underline;
+}
+.book-card .badge {
+  font-family: var(--font-book-status);
 }
 .all-books {
   margin-top: 45px;
@@ -682,7 +771,7 @@ input[readonly] {
 }
 .search-field input {
   padding-left: 42px;
-  height: 45px;
+  height: 44px;
 }
 .catalog-filters {
   display: grid;
@@ -708,7 +797,7 @@ input[readonly] {
   justify-content: space-between;
   gap: 18px;
   margin-top: 25px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .pagination {
   display: flex;
@@ -723,9 +812,9 @@ input[readonly] {
   background: #fff;
   border: 0;
   border-right: 1px solid var(--line);
-  width: 39px;
-  height: 39px;
-  font-size: 12px;
+  width: 44px;
+  height: 44px;
+  font-size: 14px;
 }
 .pagination button:last-child {
   border-right: 0;
@@ -741,7 +830,7 @@ input[readonly] {
   display: inline-flex;
   align-items: center;
   gap: 9px;
-  font-size: 12px;
+  font-size: 16px;
   text-decoration: none;
   color: var(--muted);
   margin-bottom: 25px;
@@ -751,27 +840,28 @@ input[readonly] {
 }
 .detail-card {
   display: grid;
-  grid-template-columns: 250px 1fr;
-  gap: 35px;
+  grid-template-columns: 264px minmax(0, 1fr);
+  gap: 48px;
   background: #fff;
   border: 1px solid var(--line);
-  padding: 30px;
-  border-radius: 12px;
+  padding: 24px;
+  border-radius: var(--radius-card);
 }
 .detail-cover {
   width: 100%;
   align-self: start;
 }
 .detail-content h2 {
-  font-size: 32px;
-  margin: 13px 0 22px;
+  font-size: 26px;
+  font-weight: 600;
+  margin: 0 0 22px;
 }
 .book-facts {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 14px 26px;
   margin: 0 0 26px;
-  font-size: 12px;
+  font-size: 14px;
 }
 .book-facts > div {
   display: flex;
@@ -792,19 +882,20 @@ input[readonly] {
   padding-top: 22px;
 }
 .synopsis h3 {
-  font-size: 12px;
+  font-size: 14px;
+  font-weight: 600;
   margin-bottom: 10px;
 }
 .synopsis p {
   color: #756b6e;
-  line-height: 1.85;
-  font-size: 13px;
+  line-height: 20px;
+  font-size: 14px;
 }
 .availability-detail {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  font-size: 12px;
+  font-size: 14px;
   padding-top: 12px;
 }
 .availability-detail .available-text {
@@ -829,12 +920,12 @@ input[readonly] {
 }
 .role-filter select {
   min-width: 180px;
-  height: 45px;
+  height: 44px;
 }
 .table-container {
   overflow-x: auto;
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--radius-card);
   background: #fff;
 }
 table {
@@ -843,20 +934,26 @@ table {
   text-align: left;
 }
 .users-table {
-  min-width: 920px;
+  min-width: 1100px;
+}
+.users-table td strong {
+  font-weight: 500;
+}
+.users-table .badge {
+  font-weight: 600;
 }
 th {
   background: #f0ebeb;
-  font-size: 10px;
-  font-weight: 650;
+  font-size: 14px;
+  font-weight: 700;
   white-space: nowrap;
   color: #63565a;
   padding: 16px;
 }
 td {
-  padding: 16px;
+  padding: 24px 16px;
   border-top: 1px solid #eee9e3;
-  font-size: 11px;
+  font-size: 14px;
 }
 td strong {
   font-weight: 600;
@@ -865,11 +962,11 @@ tbody tr:hover {
   background: #fdfaf6;
 }
 .self-label {
-  font-size: 9px;
+  font-size: 12px;
   color: var(--wine);
   background: #f1e5e7;
   margin-left: 8px;
-  border-radius: 3px;
+  border-radius: var(--radius-badge);
   padding: 3px 5px;
 }
 .row-actions {
@@ -884,11 +981,11 @@ tbody tr:hover {
 }
 .status-action {
   border: 1px solid #e2ced2;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   background: #fff;
   color: var(--wine);
   padding: 5px 8px;
-  font-size: 10px;
+  font-size: 12px;
   min-width: 78px;
   min-height: 30px;
 }
@@ -917,7 +1014,7 @@ tbody tr:hover {
   max-height: calc(100dvh - 40px);
   overflow-y: auto;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-modal);
   padding: 25px;
   color: #302a2b;
   background: #fff;
@@ -934,7 +1031,7 @@ tbody tr:hover {
   margin-bottom: 20px;
 }
 .modal-header h2 {
-  font-size: 24px;
+  font-size: 22px;
   margin: 0;
   flex: 1;
 }
@@ -955,8 +1052,12 @@ tbody tr:hover {
 .user-form-modal .form-actions {
   margin-top: 12px;
 }
+.user-status-modal .modal-header h2 {
+  font-family: var(--font-ui);
+  font-size: 20px;
+}
 .confirmation-copy {
-  font-size: 13px;
+  font-size: 14px;
 }
 .dashboard-integration {
   text-align: center;
@@ -985,7 +1086,7 @@ tbody tr:hover {
   font-size: 10px;
 }
 .footer-brand {
-  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-family: var(--font-heading);
   font-size: 20px;
   color: #9b8178;
   font-weight: 600;
@@ -1044,9 +1145,9 @@ tbody tr:hover {
   background: #fcf0f1;
   color: #8d3446;
   padding: 15px;
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   margin-bottom: 18px;
-  font-size: 12px;
+  font-size: 14px;
 }
 .error-notice > svg {
   margin-top: 1px;
@@ -1070,8 +1171,8 @@ tbody tr:hover {
   background: #fff;
   padding: 14px 18px;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  font-size: 12px;
+  border-radius: var(--radius-control);
+  font-size: 14px;
   pointer-events: auto;
 }
 .toast > span:nth-child(2) {
@@ -1095,16 +1196,16 @@ tbody tr:hover {
 }
 .notification-panel {
   position: absolute;
-  width: 470px;
+  width: 480px;
   right: 0;
   top: calc(100% + 28px);
   z-index: 30;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   background: #fff;
   color: #302a2b;
   box-shadow: 0 10px 40px #3a1b2c20;
-  padding: 24px 26px;
+  padding: 28px;
   max-height: min(650px, calc(100dvh - 180px));
   overflow-y: auto;
 }
@@ -1115,9 +1216,9 @@ tbody tr:hover {
   gap: 12px;
 }
 .notification-panel h2 {
-  font-family: 'Raleway', Arial, sans-serif;
-  font-size: 20px;
-  font-weight: 500;
+  font-family: var(--font-ui);
+  font-size: 22px;
+  font-weight: 600;
   margin: 0;
 }
 .notification-list {
@@ -1135,24 +1236,24 @@ tbody tr:hover {
   border-top: 0;
 }
 .notification-list h3 {
-  font-size: 13px;
+  font-size: 16px;
   margin-bottom: 5px;
   line-height: 1.55;
 }
 .notification-list p {
-  font-size: 12px;
+  font-size: 14px;
   color: var(--muted);
   margin-bottom: 5px;
 }
 .notification-list time {
-  font-size: 11px;
+  font-size: 14px;
   color: var(--muted);
 }
 .notification-cover {
   width: 44px;
   height: 62px;
   flex-shrink: 0;
-  border-radius: 2px;
+  border-radius: 4px;
 }
 .notification-cover img {
   width: 100%;
@@ -1183,7 +1284,7 @@ tbody tr:hover {
   padding: 14px 18px;
   background: #fff;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
 }
 :root:has(.demo-banner) {
   --feedback-top: 54px;
@@ -1209,7 +1310,7 @@ body:has(.toast) .reminder-popup {
   border: 0;
 }
 .reminder-books p {
-  font-size: 12px;
+  font-size: 14px;
   margin: 0;
   line-height: 1.7;
 }
@@ -1231,6 +1332,18 @@ body:has(.toast) .reminder-popup {
   }
 }
 @media (max-width: 1200px) {
+  .auth-art {
+    padding: 32px;
+  }
+  .auth-art .wordmark {
+    top: 32px;
+    left: 32px;
+    font-size: 30px;
+  }
+  .auth-art-copy h2 {
+    font-size: 36px;
+    line-height: 1.45;
+  }
   .book-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
@@ -1264,6 +1377,32 @@ body:has(.toast) .reminder-popup {
   }
 }
 @media (max-width: 800px) {
+  .notifications-wrapper {
+    position: static;
+  }
+  .notification-panel {
+    left: 12px;
+    right: 12px;
+    top: calc(100% + 12px);
+    width: auto;
+    /* Include the wrapped header, demo banner, and panel margins. */
+    max-height: calc(100dvh - 100% - 80px);
+  }
+  .auth-art {
+    padding: 24px;
+  }
+  .auth-art .wordmark {
+    left: 24px;
+    font-size: 24px;
+  }
+  .auth-art-copy h2 {
+    font-size: 32px;
+    line-height: 1.3;
+  }
+  .auth-art-copy p {
+    font-size: 14px;
+    line-height: 20px;
+  }
   .auth-layout {
     grid-template-columns: 31% 1fr;
   }
@@ -1321,10 +1460,10 @@ body:has(.toast) .reminder-popup {
 }
 @media (max-width: 600px) {
   body {
-    font-size: 13px;
+    font-size: 14px;
   }
   h1 {
-    font-size: 31px;
+    font-size: 28px;
   }
   h2 {
     font-size: 28px;
@@ -1398,10 +1537,10 @@ body:has(.toast) .reminder-popup {
     max-width: 155px;
   }
   .account-label span:first-child {
-    font-size: 11px;
+    font-size: 14px;
   }
   .account-label span:last-child {
-    font-size: 9px;
+    font-size: 12px;
   }
   .logout-button {
     padding-left: 8px;
@@ -1413,7 +1552,7 @@ body:has(.toast) .reminder-popup {
     width: 28px;
   }
   .main-nav {
-    font-size: 11px;
+    font-size: 14px;
     min-height: 43px;
     gap: 23px;
   }
@@ -1421,14 +1560,15 @@ body:has(.toast) .reminder-popup {
     padding: 27px 16px 35px;
   }
   .section-heading {
+    flex-wrap: wrap;
     gap: 12px;
     margin-bottom: 20px;
   }
   .section-heading p {
-    font-size: 11px;
+    font-size: 14px;
   }
   .section-heading .button {
-    font-size: 11px;
+    font-size: 14px;
     padding: 9px 12px;
   }
   .eyebrow {
@@ -1454,23 +1594,23 @@ body:has(.toast) .reminder-popup {
   }
   .book-card {
     padding: 9px;
-    border-radius: 9px;
   }
   .book-card h3 {
-    font-size: 11px;
+    font-size: 13px;
   }
   .book-meta,
   .book-author {
-    font-size: 9px;
+    font-size: 12px;
   }
   .book-card-bottom {
-    gap: 2px;
+    flex-wrap: wrap;
+    gap: 6px;
   }
   .book-card-bottom a {
-    font-size: 10px;
+    font-size: 12px;
   }
   .badge {
-    font-size: 9px;
+    font-size: 12px;
     padding: 4px 5px;
   }
   .all-books {
@@ -1481,10 +1621,10 @@ body:has(.toast) .reminder-popup {
   }
   .catalog-filters .button {
     padding: 10px 12px;
-    font-size: 11px;
+    font-size: 14px;
   }
   .search-field input {
-    font-size: 11px;
+    font-size: 14px;
     padding-left: 36px;
   }
   .search-field > svg {
@@ -1493,7 +1633,7 @@ body:has(.toast) .reminder-popup {
   .pagination-row {
     flex-wrap: wrap;
     gap: 15px;
-    font-size: 10px;
+    font-size: 12px;
   }
   .pagination {
     margin-left: auto;
@@ -1511,7 +1651,7 @@ body:has(.toast) .reminder-popup {
     margin: 0 auto 25px;
   }
   .detail-content h2 {
-    font-size: 29px;
+    font-size: 26px;
   }
   .book-facts {
     gap: 12px;
@@ -1520,7 +1660,7 @@ body:has(.toast) .reminder-popup {
     min-width: 90px;
   }
   .synopsis p {
-    font-size: 12px;
+    font-size: 14px;
   }
   .borrow-integration {
     align-items: flex-start;
@@ -1557,14 +1697,6 @@ body:has(.toast) .reminder-popup {
   .app-footer span:last-child {
     max-width: 200px;
     text-align: right;
-  }
-  .notification-panel {
-    position: fixed;
-    left: 12px;
-    right: 12px;
-    top: 137px;
-    width: auto;
-    max-height: calc(100dvh - 155px);
   }
   .reminder-popup {
     width: calc(100vw - 24px);
