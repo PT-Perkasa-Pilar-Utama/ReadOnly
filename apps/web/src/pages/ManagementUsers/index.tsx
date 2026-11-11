@@ -200,6 +200,7 @@ export default function UsersPage() {
         {(user) => (
           <Modal
             title="Nonaktifkan akun"
+            class="user-status-modal"
             warning
             onClose={() => {
               if (!busy()) setConfirm(null);

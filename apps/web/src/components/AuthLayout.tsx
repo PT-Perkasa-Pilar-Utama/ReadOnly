@@ -6,11 +6,19 @@ export default function AuthLayout(props: { children: JSX.Element }) {
     <>
       <DemoBanner />
       <main class="auth-layout">
-        <aside class="auth-art">
-          <img
-            src="/images/auth-panel.webp"
-            alt="ReadOnly. Ruang baca untuk setiap cerita. Temukan bacaan pilihan dan kelola peminjaman buku dalam satu tempat."
-          />
+        <aside class="auth-art" aria-label="ReadOnly">
+          <img src="/images/auth-background.jpg" alt="" />
+          <a href="/login" class="wordmark" aria-label="ReadOnly">
+            ReadOnly
+          </a>
+          {/* AC-01.01, AC-02.01: live text keeps the SVG fonts at their actual sizes. */}
+          <div class="auth-art-copy">
+            <h2>Ruang baca untuk setiap cerita.</h2>
+            <p>
+              Temukan bacaan pilihan dan kelola peminjaman buku dalam satu
+              tempat
+            </p>
+          </div>
         </aside>
         <section class="auth-main">
           <a

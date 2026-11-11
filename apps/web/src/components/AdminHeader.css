@@ -2,7 +2,7 @@
   position: relative;
   z-index: 2;
   width: 100%;
-  min-height: 76px;
+  min-height: 97px;
   background: #702d40;
   color: #fff;
 }
@@ -10,7 +10,7 @@
 .admin-header__inner {
   display: flex;
   width: min(100% - 80px, 1380px);
-  min-height: 76px;
+  min-height: 97px;
   align-items: center;
   gap: clamp(24px, 3.2vw, 48px);
   margin: 0 auto;
@@ -19,12 +19,10 @@
 .admin-header__brand {
   flex: 0 0 auto;
   color: #fff;
-  font-family: Georgia, 'Times New Roman', serif;
-  font-size: 25px;
+  font-family: var(--font-heading);
+  font-size: 24px;
   font-weight: 700;
-  letter-spacing: -0.8px;
-  text-decoration: underline;
-  text-underline-offset: 4px;
+  text-decoration: none;
 }
 
 .admin-header__navigation {
@@ -39,12 +37,12 @@
 .admin-header__link {
   position: relative;
   display: inline-flex;
-  min-height: 76px;
+  min-height: 97px;
   flex: 0 0 auto;
   align-items: center;
   color: rgb(255 255 255 / 82%);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 500;
   text-decoration: none;
   white-space: nowrap;
   transition: color 150ms ease;
@@ -53,6 +51,10 @@
 .admin-header__link:hover,
 .admin-header__link.is-active {
   color: #fff;
+}
+
+.admin-header__link.is-active {
+  font-weight: 700;
 }
 
 .admin-header__link.is-active::after {
@@ -71,7 +73,7 @@
 
 .admin-header__role {
   color: rgb(255 255 255 / 94%);
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 600;
 }
 
@@ -91,7 +93,7 @@
 }
 
 .admin-header__email {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .admin-header__logout {
@@ -166,11 +168,11 @@
   }
 
   .admin-header__link {
-    font-size: 11px;
+    font-size: 14px;
   }
 
   .admin-header__role {
-    font-size: 12px;
+    font-size: 14px;
   }
 
   .admin-header__account {

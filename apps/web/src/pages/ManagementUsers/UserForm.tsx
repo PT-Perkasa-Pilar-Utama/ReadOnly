@@ -121,6 +121,7 @@ export default function UserForm(props: { user?: UserDetail }) {
             onInput={(value) => update('address', value)}
             error={errors().address}
             autocomplete="street-address"
+            multiline
           />
         </Show>
         <Field

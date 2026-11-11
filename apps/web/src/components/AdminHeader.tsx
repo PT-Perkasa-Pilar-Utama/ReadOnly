@@ -70,7 +70,7 @@ export function AdminHeader(props: AdminHeaderProps) {
     <header class="admin-header">
       <div class="admin-header__inner">
         <a
-          class="admin-header__brand"
+          class="wordmark admin-header__brand"
           href="/"
           aria-label="ReadOnly, Dashboard"
         >

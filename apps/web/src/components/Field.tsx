@@ -12,6 +12,7 @@ export default function Field(props: {
   readonly?: boolean;
   placeholder?: string;
   required?: boolean;
+  multiline?: boolean;
 }) {
   const [visible, setVisible] = createSignal(false);
   return (
@@ -26,24 +27,42 @@ export default function Field(props: {
         </Show>
       </label>
       <div class="input-wrap">
-        <input
-          id={props.name}
-          name={props.name}
-          type={
-            props.type === 'password' && visible()
-              ? 'text'
-              : (props.type ?? 'text')
+        <Show
+          when={props.multiline}
+          fallback={
+            <input
+              id={props.name}
+              name={props.name}
+              type={
+                props.type === 'password' && visible()
+                  ? 'text'
+                  : (props.type ?? 'text')
+              }
+              value={props.value}
+              onInput={(event) => props.onInput(event.currentTarget.value)}
+              autocomplete={props.autocomplete}
+              readonly={props.readonly}
+              placeholder={props.placeholder}
+              required={props.required !== false && !props.readonly}
+              aria-invalid={Boolean(props.error)}
+              aria-describedby={props.error ? `${props.name}-error` : undefined}
+              classList={{ 'password-input': props.type === 'password' }}
+            />
           }
-          value={props.value}
-          onInput={(event) => props.onInput(event.currentTarget.value)}
-          autocomplete={props.autocomplete}
-          readonly={props.readonly}
-          placeholder={props.placeholder}
-          required={props.required !== false && !props.readonly}
-          aria-invalid={Boolean(props.error)}
-          aria-describedby={props.error ? `${props.name}-error` : undefined}
-          classList={{ 'password-input': props.type === 'password' }}
-        />
+        >
+          <textarea
+            id={props.name}
+            name={props.name}
+            value={props.value}
+            onInput={(event) => props.onInput(event.currentTarget.value)}
+            autocomplete={props.autocomplete}
+            readonly={props.readonly}
+            placeholder={props.placeholder}
+            required={props.required !== false && !props.readonly}
+            aria-invalid={Boolean(props.error)}
+            aria-describedby={props.error ? `${props.name}-error` : undefined}
+          />
+        </Show>
         <Show when={props.type === 'password'}>
           <button
             type="button"
