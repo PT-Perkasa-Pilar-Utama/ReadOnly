@@ -13,7 +13,6 @@ import { AdminHeader } from '../../components/AdminHeader';
 import { requestAdminConfirmation } from '../../components/admin-feedback-store';
 import { ErrorNotice, Loading, notify } from '../../components/Feedback';
 import Modal from '../../components/Modal';
-import Pagination from '../../components/Pagination';
 import { debounced } from '../../lib/debounced';
 import './MasterGenresPage.css';
 
@@ -123,6 +122,19 @@ export default function MasterGenresPage() {
     queryFn: ({ signal }) =>
       getAdminGenreList({ q: searchTerm(), page: page(), limit: 10 }, signal),
   }));
+
+  const currentPage = () => genresQuery.data?.pagination.page ?? page();
+  const totalPages = () => genresQuery.data?.pagination.totalPages ?? 0;
+  const totalGenres = () => genresQuery.data?.pagination.total ?? 0;
+  const visiblePageNumbers = () => {
+    const total = totalPages();
+    const current = currentPage();
+    const start = Math.max(1, Math.min(current - 2, total - 4));
+    return Array.from(
+      { length: Math.min(5, total) },
+      (_, index) => start + index,
+    );
+  };
 
   function applySearch() {
     setPage(1);
@@ -407,21 +419,55 @@ export default function MasterGenresPage() {
                 </tbody>
               </table>
             </div>
-
-            <Pagination
-              pagination={
-                genresQuery.data?.pagination ?? {
-                  page: 1,
-                  limit: 10,
-                  total: 0,
-                  totalPages: 0,
-                }
-              }
-              noun="genre"
-              onChange={setPage}
-            />
           </Show>
         </section>
+
+        <Show when={!genresQuery.isPending && !genresQuery.isError}>
+          <div class="master-genres-table-footer">
+            <p>
+              Menampilkan {genresQuery.data?.genres.length ?? 0} dari{' '}
+              {totalGenres()} genre
+            </p>
+            <nav
+              class="master-genres-pagination"
+              aria-label="Paginasi daftar genre"
+            >
+              <button
+                type="button"
+                aria-label="Halaman sebelumnya"
+                disabled={currentPage() <= 1}
+                onClick={() => setPage((value) => Math.max(1, value - 1))}
+              >
+                ‹
+              </button>
+              <For each={visiblePageNumbers()}>
+                {(pageNumber) => (
+                  <button
+                    type="button"
+                    classList={{ 'is-current': pageNumber === currentPage() }}
+                    aria-label={`Halaman ${pageNumber}`}
+                    aria-current={
+                      pageNumber === currentPage() ? 'page' : undefined
+                    }
+                    onClick={() => setPage(pageNumber)}
+                  >
+                    {pageNumber}
+                  </button>
+                )}
+              </For>
+              <button
+                type="button"
+                aria-label="Halaman berikutnya"
+                disabled={totalPages() === 0 || currentPage() >= totalPages()}
+                onClick={() =>
+                  setPage((value) => Math.min(totalPages(), value + 1))
+                }
+              >
+                ›
+              </button>
+            </nav>
+          </div>
+        </Show>
       </main>
 
       <Show when={formOpen()}>
