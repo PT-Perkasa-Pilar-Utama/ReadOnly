@@ -69,9 +69,9 @@ Base: `/api/v1`
 | Add book | POST /admin/books | admin | OK |
 | Edit book | PATCH /admin/books/:id | admin | OK |
 | Delete book | DELETE /admin/books/:id | admin | OK |
-| Ajukan peminjaman | POST /loans | member | TODO |
-| Loans me | GET /loans/me | member | TODO |
-| QR token | GET /loans/:id/qr | member | TODO |
+| Ajukan peminjaman | POST /loans | member | OK |
+| Loans me | GET /loans/me | member | OK |
+| QR token | GET /loans/:id/qr | member | OK |
 | Scan preview | POST /admin/loans/qr/preview | admin | TODO |
 | QR confirm | POST /admin/loans/qr/confirm | admin | TODO |
 | Daftar pinjaman Admin | GET /admin/loans | admin | OK |
