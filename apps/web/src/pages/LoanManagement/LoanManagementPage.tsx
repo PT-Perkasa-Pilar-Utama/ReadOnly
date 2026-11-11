@@ -1,7 +1,9 @@
 import { createQuery } from '@tanstack/solid-query';
 import { useNavigate } from '@tanstack/solid-router';
-import { createSignal, For, Show } from 'solid-js';
+import { createEffect, createSignal, For, onCleanup, Show } from 'solid-js';
 import {
+  ADMIN_LOAN_STATUSES,
+  type AdminLoanStatus,
   formatLoanDate,
   getAdminLoans,
   getLoanStatusClass,
@@ -14,16 +16,62 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : '';
 }
 
+function isAdminLoanStatus(value: string): value is AdminLoanStatus {
+  return ADMIN_LOAN_STATUSES.some((status) => status === value);
+}
+
 export function LoanManagementPage() {
   const navigate = useNavigate();
+  const [searchText, setSearchText] = createSignal('');
+  const [debouncedSearch, setDebouncedSearch] = createSignal('');
+  const [selectedStatus, setSelectedStatus] = createSignal('');
+  const [appliedStatus, setAppliedStatus] = createSignal<AdminLoanStatus | ''>(
+    '',
+  );
   const [page, setPage] = createSignal(1);
 
+  createEffect(() => {
+    const value = searchText().trim();
+    const timeoutId = window.setTimeout(() => setDebouncedSearch(value), 250);
+    onCleanup(() => window.clearTimeout(timeoutId));
+  });
+
+  createEffect(() => {
+    debouncedSearch();
+    setPage(1);
+  });
+
   const loansQuery = createQuery(() => ({
-    queryKey: ['admin', 'loans', 'list', page()],
-    queryFn: ({ signal }) => getAdminLoans({ page: page(), limit: 10 }, signal),
+    queryKey: [
+      'admin',
+      'loans',
+      'list',
+      debouncedSearch(),
+      appliedStatus(),
+      page(),
+    ],
+    queryFn: ({ signal }) => {
+      const search = debouncedSearch();
+      const status = appliedStatus();
+      return getAdminLoans(
+        {
+          ...(search ? { q: search } : {}),
+          ...(status ? { status } : {}),
+          page: page(),
+          limit: 10,
+        },
+        signal,
+      );
+    },
     refetchInterval: 60_000,
     refetchOnWindowFocus: true,
   }));
+
+  function applyFilters() {
+    const status = selectedStatus();
+    setAppliedStatus(isAdminLoanStatus(status) ? status : '');
+    setPage(1);
+  }
 
   const currentPage = () => loansQuery.data?.pagination.page ?? page();
   const totalPages = () => loansQuery.data?.pagination.totalPages ?? 0;
@@ -51,6 +99,44 @@ export function LoanManagementPage() {
         </section>
 
         <section class="loan-management-panel" aria-label="Daftar peminjaman">
+          <div class="loan-management-toolbar">
+            <label class="loan-management-search">
+              <span>Cari Peminjaman</span>
+              <input
+                type="search"
+                value={searchText()}
+                onInput={(event) => setSearchText(event.currentTarget.value)}
+                placeholder="Cari nomor peminjaman, nama peminjam, atau judul buku"
+                aria-label="Cari nomor peminjaman, nama peminjam, atau judul buku"
+              />
+            </label>
+            <label class="loan-management-filter">
+              <span>Status</span>
+              <select
+                value={selectedStatus()}
+                onChange={(event) =>
+                  setSelectedStatus(event.currentTarget.value)
+                }
+                aria-label="Filter status peminjaman"
+              >
+                <option value="">Semua Status</option>
+                <For each={ADMIN_LOAN_STATUSES}>
+                  {(status) => (
+                    <option value={status}>{getLoanStatusLabel(status)}</option>
+                  )}
+                </For>
+              </select>
+            </label>
+            <button
+              class="loan-management-button loan-management-button--primary"
+              type="button"
+              onClick={applyFilters}
+              disabled={loansQuery.isPending}
+            >
+              Set Filter
+            </button>
+          </div>
+
           <Show when={loansQuery.isPending}>
             <div
               class="loan-management-state"

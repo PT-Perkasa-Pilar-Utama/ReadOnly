@@ -52,6 +52,50 @@
   box-shadow: 0 2px 9px rgb(60 38 30 / 3%);
 }
 
+.loan-management-toolbar {
+  display: grid;
+  grid-template-columns: minmax(280px, 2fr) minmax(180px, 0.8fr) auto;
+  align-items: end;
+  gap: 12px;
+  padding: 18px;
+  border-bottom: 1px solid #f0ebe7;
+}
+
+.loan-management-search,
+.loan-management-filter {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.loan-management-search > span,
+.loan-management-filter > span {
+  color: #514745;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.loan-management-search input,
+.loan-management-filter select {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 1px solid #e4ddd7;
+  border-radius: 8px;
+  background: #fff;
+  color: #2b2424;
+  font: inherit;
+  font-size: 12px;
+}
+
+.loan-management-search input:focus-visible,
+.loan-management-filter select:focus-visible,
+.loan-management-button:focus-visible {
+  outline: 2px solid #702d40;
+  outline-offset: 2px;
+}
+
 .loan-detail-card {
   overflow: hidden;
   border: 1px solid #e9e1da;
