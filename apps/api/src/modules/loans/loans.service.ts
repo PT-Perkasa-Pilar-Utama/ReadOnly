@@ -1,19 +1,29 @@
+import crypto from 'node:crypto';
 import {
   type AdminLoanDetailData,
   type AdminLoanItem,
   type AdminLoansQuery,
   type ApiSuccessEnvelope,
+  type CreateLoanInput,
+  type CreateLoanResponseData,
   calculateFine,
   computeFineAmount,
   getWibDateString,
   getWibDaysDifference,
+  LOAN_MESSAGES,
   LOAN_STATUS_LABELS,
+  type LoanQrResponseData,
   type LoanStatus,
+  type MyLoanItem,
+  type MyLoansQuery,
   type PaginatedResponse,
+  STATUS_MEMBER_ACTION_MAP,
 } from '@readonly/shared';
 import { type ClockPort, SystemClock } from '../../ports/clock';
 import type { StoragePort } from '../../ports/storage';
 import {
+  createConflictError,
+  createForbiddenError,
   createInvalidStateTransitionError,
   createNotFoundError,
 } from '../../shared/errors';
@@ -51,6 +61,17 @@ export interface LoansServiceOptions {
   clock?: ClockPort;
 }
 
+export function generateQrToken(): { token: string; hash: string } {
+  const bytes = crypto.randomBytes(16);
+  const token = bytes.toString('base64url');
+  const hash = hashQrToken(token);
+  return { token, hash };
+}
+
+export function hashQrToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
 export class LoansService {
   private readonly repository: LoansRepository;
   private readonly storage: StoragePort;
@@ -64,6 +85,113 @@ export class LoansService {
 
   getClock(): ClockPort {
     return this.clock;
+  }
+
+  getStorage(): StoragePort {
+    return this.storage;
+  }
+
+  getRepository(): LoansRepository {
+    return this.repository;
+  }
+
+  async createLoan(
+    userId: string,
+    input: CreateLoanInput,
+  ): Promise<ApiSuccessEnvelope<CreateLoanResponseData>> {
+    const book = await this.repository.findBookById(input.book_id);
+    if (!book) {
+      throw createNotFoundError(LOAN_MESSAGES.BOOK_NOT_FOUND);
+    }
+
+    if (book.availableCount <= 0) {
+      throw createConflictError(LOAN_MESSAGES.OUT_OF_STOCK);
+    }
+
+    const { hash } = generateQrToken();
+    const loanNo = await this.repository.generateLoanNo(this.clock.now());
+
+    const created = await this.repository.createLoan({
+      loanNo,
+      userId,
+      bookId: input.book_id,
+      status: 'PENDING',
+      requestedAt: this.clock.now(),
+      qrTokenHash: hash,
+    });
+
+    return {
+      data: {
+        id: created.id,
+        loan_no: created.loanNo,
+        status: 'PENDING',
+        status_label: 'Pending Peminjaman',
+      },
+      message: LOAN_MESSAGES.APPLY_SUCCESS,
+    };
+  }
+
+  async listMyLoans(
+    userId: string,
+    query: MyLoansQuery,
+  ): Promise<PaginatedResponse<MyLoanItem>> {
+    const { items, total } = await this.repository.listMyLoans(userId, query);
+    const totalPages = total === 0 ? 0 : Math.ceil(total / query.limit);
+
+    const data: MyLoanItem[] = items.map((item) => ({
+      id: item.id,
+      loan_no: item.loanNo,
+      book_id: item.bookId,
+      book_title: item.bookTitle,
+      book_author: item.bookAuthor,
+      book_cover_url: item.bookCoverPath
+        ? this.storage.getCoverUrl(item.bookCoverPath)
+        : null,
+      requested_at: item.requestedAt.toISOString(),
+      due_date: item.dueDate,
+      status: item.status,
+      status_label: LOAN_STATUS_LABELS[item.status],
+      member_action: STATUS_MEMBER_ACTION_MAP[item.status],
+    }));
+
+    return {
+      data,
+      pagination: {
+        page: query.page,
+        limit: query.limit,
+        total,
+        totalPages,
+      },
+    };
+  }
+
+  async getLoanQr(
+    userId: string,
+    loanId: string,
+  ): Promise<ApiSuccessEnvelope<LoanQrResponseData>> {
+    const loan = await this.repository.findLoanRecordById(loanId);
+    if (!loan) {
+      throw createNotFoundError(LOAN_MESSAGES.LOAN_NOT_FOUND);
+    }
+
+    if (loan.userId !== userId) {
+      throw createForbiddenError('Akses ditolak.');
+    }
+
+    if (loan.status !== 'PENDING' || loan.qrConsumedAt !== null) {
+      throw createInvalidStateTransitionError(LOAN_MESSAGES.INVALID_STATE);
+    }
+
+    const { token, hash } = generateQrToken();
+    await this.repository.updateQrTokenHash(loan.id, hash);
+
+    return {
+      data: {
+        loan_id: loan.id,
+        loan_no: loan.loanNo,
+        qr_token: token,
+      },
+    };
   }
 
   async listAdminLoans(
@@ -110,7 +238,7 @@ export class LoansService {
   ): Promise<ApiSuccessEnvelope<AdminLoanDetailData>> {
     const record = await this.repository.findAdminLoanById(id);
     if (!record) {
-      throw createNotFoundError('Peminjaman tidak ditemukan.');
+      throw createNotFoundError(LOAN_MESSAGES.LOAN_NOT_FOUND);
     }
 
     const canPayFine =
@@ -164,16 +292,12 @@ export class LoansService {
     };
   }
 
-  getRepository(): LoansRepository {
-    return this.repository;
-  }
-
   async transition(
     options: LoanTransitionOptions,
   ): Promise<LoanTransitionResult> {
     const loan = await this.repository.findLoanById(options.loanId);
     if (!loan) {
-      throw createNotFoundError('Peminjaman tidak ditemukan.');
+      throw createNotFoundError(LOAN_MESSAGES.LOAN_NOT_FOUND);
     }
 
     const currentStatus = loan.status;

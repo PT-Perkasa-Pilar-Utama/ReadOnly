@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'bun:test';
-import { type Database, QA_IDS } from '@readonly/db';
+import { type Database, QA_IDS, sha256Hex } from '@readonly/db';
 import type {
   AdminLoanDetailResponse,
   AdminLoansResponse,
   ApiErrorEnvelope,
 } from '@readonly/shared';
 import { createApp } from '../../app';
+import type { ClockPort } from '../../ports/clock';
 import { MemoryStorageAdapter } from '../../ports/storage';
 import {
   DrizzleLoansRepository,
@@ -13,17 +14,53 @@ import {
 } from './loans.repository';
 import { LoansService } from './loans.service';
 
+class MockClock implements ClockPort {
+  private currentTime: Date;
+
+  constructor(initialTime: Date) {
+    this.currentTime = initialTime;
+  }
+
+  now(): Date {
+    return new Date(this.currentTime.getTime());
+  }
+
+  utcNow(): Date {
+    return new Date(this.currentTime.getTime());
+  }
+
+  setTime(time: Date): void {
+    this.currentTime = time;
+  }
+
+  advanceHours(hours: number): void {
+    this.currentTime = new Date(
+      this.currentTime.getTime() + hours * 60 * 60 * 1000,
+    );
+  }
+
+  advanceDays(days: number): void {
+    this.currentTime = new Date(
+      this.currentTime.getTime() + days * 24 * 60 * 60 * 1000,
+    );
+  }
+}
+
 interface TestHarness {
   app: ReturnType<typeof createApp>;
   storagePort: MemoryStorageAdapter;
   loansRepository: InMemoryLoansRepository;
+  loansService: LoansService;
+  clock: MockClock;
   getAdminHeaders: () => Promise<Record<string, string>>;
   getMemberHeaders: () => Promise<Record<string, string>>;
+  getMember2Headers: () => Promise<Record<string, string>>;
 }
 
 function createTestHarness(
   repoCustomizer?: (repo: InMemoryLoansRepository) => void,
 ): TestHarness {
+  const clock = new MockClock(new Date('2026-11-09T03:00:00.000Z')); // 10:00 WIB on 2026-11-09
   const storagePort = new MemoryStorageAdapter();
   const loansRepository = new InMemoryLoansRepository();
   if (repoCustomizer) {
@@ -32,17 +69,20 @@ function createTestHarness(
   const loansService = new LoansService({
     repository: loansRepository,
     storage: storagePort,
+    clock,
   });
 
   const app = createApp({
     loansRepository,
     loansService,
     storagePort,
+    clock,
     bcryptSaltRounds: 4,
   });
 
   let cachedAdminHeaders: Record<string, string> | null = null;
   let cachedMemberHeaders: Record<string, string> | null = null;
+  let cachedMember2Headers: Record<string, string> | null = null;
 
   const getAdminHeaders = async () => {
     if (cachedAdminHeaders) {
@@ -88,12 +128,37 @@ function createTestHarness(
     return cachedMemberHeaders;
   };
 
+  const getMember2Headers = async () => {
+    if (cachedMember2Headers) {
+      return cachedMember2Headers;
+    }
+    const res = await app.handle(
+      new Request('http://localhost/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          email: 'newmember@gmail.com',
+          password: 'password',
+        }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { data: { token: string } };
+    cachedMember2Headers = {
+      cookie: `readonly_session=${body.data.token}`,
+    };
+    return cachedMember2Headers;
+  };
+
   return {
     app,
     storagePort,
     loansRepository,
+    loansService,
+    clock,
     getAdminHeaders,
     getMemberHeaders,
+    getMember2Headers,
   };
 }
 
@@ -739,5 +804,494 @@ describe('loans module - DrizzleLoansRepository', () => {
     expect(updateCalled).toBe(true);
     expect(eventInserted).toBe(true);
     expect(notifInserted).toBe(true);
+  });
+});
+
+describe('Loans API - BE-S2-02: Ajukan pinjam + token QR', () => {
+  describe('POST /loans (ajukan peminjaman, Member - AC-08.01, AC-08.04)', () => {
+    it('successfully creates a loan with status PENDING and returns 201 (AC-08.01)', async () => {
+      const { app, getMemberHeaders, loansRepository } = createTestHarness();
+      const headers = await getMemberHeaders();
+
+      const initialBook = await loansRepository.findBookById(
+        QA_IDS.books.bookB,
+      );
+      expect(initialBook?.availableCount).toBe(2);
+
+      const res = await app.handle(
+        new Request('http://localhost/api/v1/loans', {
+          method: 'POST',
+          headers: {
+            ...headers,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            book_id: QA_IDS.books.bookB,
+          }),
+        }),
+      );
+
+      expect(res.status).toBe(201);
+      const json = (await res.json()) as {
+        data: {
+          id: string;
+          loan_no: string;
+          status: string;
+          status_label: string;
+        };
+        message: string;
+      };
+
+      expect(json.message).toBe('Pengajuan peminjaman berhasil');
+      expect(json.data.status).toBe('PENDING');
+      expect(json.data.status_label).toBe('Pending Peminjaman');
+      expect(json.data.loan_no).toMatch(/^PJM-20261109-\d{4}$/);
+
+      // Verify book stock is not yet decremented (it decrements on admin confirmation per AC-08.03)
+      const afterBook = await loansRepository.findBookById(QA_IDS.books.bookB);
+      expect(afterBook?.availableCount).toBe(2);
+
+      // Verify loan record in repository has qrTokenHash populated
+      const loan = await loansRepository.findLoanRecordById(json.data.id);
+      expect(loan).not.toBeNull();
+      expect(loan?.status).toBe('PENDING');
+      expect(loan?.qrTokenHash).toBeDefined();
+      expect(loan?.qrTokenHash?.length).toBe(64); // SHA-256 hex
+    });
+
+    it('rejects with 409 conflict when book is out of stock (AC-08.04)', async () => {
+      const { app, getMemberHeaders } = createTestHarness();
+      const headers = await getMemberHeaders();
+
+      const res = await app.handle(
+        new Request('http://localhost/api/v1/loans', {
+          method: 'POST',
+          headers: {
+            ...headers,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            book_id: QA_IDS.books.bookEmpty, // stock is 0
+          }),
+        }),
+      );
+
+      expect(res.status).toBe(409);
+      const json = (await res.json()) as { code: string; message: string };
+      expect(json.code).toBe('conflict');
+      expect(json.message).toBe('Buku tidak tersedia (stok habis)');
+    });
+
+    it('returns 404 when book does not exist or is soft-deleted', async () => {
+      const { app, getMemberHeaders } = createTestHarness();
+      const headers = await getMemberHeaders();
+
+      const res = await app.handle(
+        new Request('http://localhost/api/v1/loans', {
+          method: 'POST',
+          headers: {
+            ...headers,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            book_id: '00000000-0000-4000-8002-999999999999',
+          }),
+        }),
+      );
+
+      expect(res.status).toBe(404);
+      const json = (await res.json()) as { code: string; message: string };
+      expect(json.code).toBe('not_found');
+      expect(json.message).toBe('Buku tidak ditemukan.');
+    });
+
+    it('returns 422 when book_id is invalid UUID format', async () => {
+      const { app, getMemberHeaders } = createTestHarness();
+      const headers = await getMemberHeaders();
+
+      const res = await app.handle(
+        new Request('http://localhost/api/v1/loans', {
+          method: 'POST',
+          headers: {
+            ...headers,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            book_id: 'invalid-uuid-string',
+          }),
+        }),
+      );
+
+      expect(res.status).toBe(422);
+    });
+
+    it('enforces authentication and member role on POST /loans (SEC-02, SEC-05)', async () => {
+      const { app, getAdminHeaders } = createTestHarness();
+
+      // Unauthenticated -> 401
+      const unauthRes = await app.handle(
+        new Request('http://localhost/api/v1/loans', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ book_id: QA_IDS.books.bookA }),
+        }),
+      );
+      expect(unauthRes.status).toBe(401);
+
+      // Admin role (not member) -> 403
+      const adminHeaders = await getAdminHeaders();
+      const adminRes = await app.handle(
+        new Request('http://localhost/api/v1/loans', {
+          method: 'POST',
+          headers: {
+            ...adminHeaders,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({ book_id: QA_IDS.books.bookA }),
+        }),
+      );
+      expect(adminRes.status).toBe(403);
+    });
+
+    it('generates sequential loan_no on the same day and restarts sequence on new day (Q-36)', async () => {
+      const { app, getMemberHeaders, clock } = createTestHarness();
+      const headers = await getMemberHeaders();
+
+      // First loan on 2026-11-09 (seed already has 0001-0011)
+      const res1 = await app.handle(
+        new Request('http://localhost/api/v1/loans', {
+          method: 'POST',
+          headers: { ...headers, 'content-type': 'application/json' },
+          body: JSON.stringify({ book_id: QA_IDS.books.bookA }),
+        }),
+      );
+      expect(res1.status).toBe(201);
+      const json1 = (await res1.json()) as { data: { loan_no: string } };
+      expect(json1.data.loan_no).toBe('PJM-20261109-0012');
+
+      const res2 = await app.handle(
+        new Request('http://localhost/api/v1/loans', {
+          method: 'POST',
+          headers: { ...headers, 'content-type': 'application/json' },
+          body: JSON.stringify({ book_id: QA_IDS.books.bookA }),
+        }),
+      );
+      expect(res2.status).toBe(201);
+      const json2 = (await res2.json()) as { data: { loan_no: string } };
+      expect(json2.data.loan_no).toBe('PJM-20261109-0013');
+
+      // Advance clock to next day: 2026-11-10
+      clock.advanceDays(1);
+
+      const res3 = await app.handle(
+        new Request('http://localhost/api/v1/loans', {
+          method: 'POST',
+          headers: { ...headers, 'content-type': 'application/json' },
+          body: JSON.stringify({ book_id: QA_IDS.books.bookA }),
+        }),
+      );
+      expect(res3.status).toBe(201);
+      const json3 = (await res3.json()) as { data: { loan_no: string } };
+      expect(json3.data.loan_no).toBe('PJM-20261110-0001');
+    });
+  });
+
+  describe('GET /loans/me (daftar pinjaman member - AC-08.05)', () => {
+    it('returns member loans list with pagination and correctly mapped actions (AC-08.05)', async () => {
+      const { app, getMemberHeaders } = createTestHarness();
+      const headers = await getMemberHeaders();
+
+      const res = await app.handle(
+        new Request('http://localhost/api/v1/loans/me?page=1&limit=20', {
+          method: 'GET',
+          headers,
+        }),
+      );
+
+      expect(res.status).toBe(200);
+      const json = (await res.json()) as {
+        data: Array<{
+          id: string;
+          loan_no: string;
+          book_id: string;
+          book_title: string;
+          book_author: string;
+          book_cover_url: string | null;
+          requested_at: string;
+          due_date: string | null;
+          status: string;
+          status_label: string;
+          member_action: string;
+        }>;
+        pagination: {
+          page: number;
+          limit: number;
+          total: number;
+          totalPages: number;
+        };
+      };
+
+      expect(json.data.length).toBeGreaterThanOrEqual(1);
+      expect(json.pagination.page).toBe(1);
+      expect(json.pagination.limit).toBe(20);
+
+      const pendingLoan = json.data.find((l) => l.status === 'PENDING');
+      expect(pendingLoan).toBeDefined();
+      expect(pendingLoan?.status_label).toBe('Pending Peminjaman');
+      expect(pendingLoan?.member_action).toBe('QR');
+      expect(pendingLoan?.book_title).toBe('Book-B: Clean Architecture');
+      expect(pendingLoan?.book_cover_url).toBe('/api/v1/covers/clean-arch.jpg');
+
+      // Verify other member action mappings per AC-08.05
+      const borrowedLoan = json.data.find((l) => l.status === 'BORROWED');
+      expect(borrowedLoan?.member_action).toBe('Kembalikan');
+
+      const returnPendingLoan = json.data.find(
+        (l) => l.status === 'RETURN_PENDING',
+      );
+      expect(returnPendingLoan?.member_action).toBe('Menunggu admin');
+
+      const returnedLoan = json.data.find((l) => l.status === 'RETURNED');
+      expect(returnedLoan?.member_action).toBe('Selesai');
+    });
+
+    it('enforces data isolation between members (SEC-05)', async () => {
+      const { app, getMemberHeaders, getMember2Headers } = createTestHarness();
+      const member1Headers = await getMemberHeaders();
+      const member2Headers = await getMember2Headers();
+
+      // Member 1 creates a loan
+      const createRes = await app.handle(
+        new Request('http://localhost/api/v1/loans', {
+          method: 'POST',
+          headers: {
+            ...member1Headers,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({ book_id: QA_IDS.books.bookA }),
+        }),
+      );
+      expect(createRes.status).toBe(201);
+      const createJson = (await createRes.json()) as { data: { id: string } };
+      const createdLoanId = createJson.data.id;
+
+      // Member 2 checks their loans list
+      const resMember2 = await app.handle(
+        new Request('http://localhost/api/v1/loans/me', {
+          method: 'GET',
+          headers: member2Headers,
+        }),
+      );
+      expect(resMember2.status).toBe(200);
+      const jsonMember2 = (await resMember2.json()) as {
+        data: Array<{ id: string }>;
+      };
+      const foundInMember2 = jsonMember2.data.some(
+        (l) => l.id === createdLoanId,
+      );
+      expect(foundInMember2).toBe(false);
+
+      // Member 1 checks their loans list and finds it
+      const resMember1 = await app.handle(
+        new Request('http://localhost/api/v1/loans/me', {
+          method: 'GET',
+          headers: member1Headers,
+        }),
+      );
+      expect(resMember1.status).toBe(200);
+      const jsonMember1 = (await resMember1.json()) as {
+        data: Array<{ id: string }>;
+      };
+      const foundInMember1 = jsonMember1.data.some(
+        (l) => l.id === createdLoanId,
+      );
+      expect(foundInMember1).toBe(true);
+    });
+
+    it('enforces authentication on GET /loans/me (SEC-02)', async () => {
+      const { app, getAdminHeaders } = createTestHarness();
+
+      const unauthRes = await app.handle(
+        new Request('http://localhost/api/v1/loans/me'),
+      );
+      expect(unauthRes.status).toBe(401);
+
+      const adminHeaders = await getAdminHeaders();
+      const adminRes = await app.handle(
+        new Request('http://localhost/api/v1/loans/me', {
+          headers: adminHeaders,
+        }),
+      );
+      expect(adminRes.status).toBe(403);
+    });
+  });
+
+  describe('GET /loans/:id/qr (ambil/rotasi token QR - AC-08.02)', () => {
+    it('returns QR token for pending loan and updates hash in database (AC-08.02)', async () => {
+      const { app, getMemberHeaders, loansRepository } = createTestHarness();
+      const headers = await getMemberHeaders();
+
+      const res = await app.handle(
+        new Request(
+          `http://localhost/api/v1/loans/${QA_IDS.loans.pending}/qr`,
+          {
+            method: 'GET',
+            headers,
+          },
+        ),
+      );
+
+      expect(res.status).toBe(200);
+      const json = (await res.json()) as {
+        data: {
+          loan_id: string;
+          loan_no: string;
+          qr_token: string;
+        };
+      };
+
+      expect(json.data.loan_id).toBe(QA_IDS.loans.pending);
+      expect(json.data.loan_no).toBe('PJM-20261109-0001');
+      expect(json.data.qr_token).toBeDefined();
+      expect(json.data.qr_token.length).toBeGreaterThanOrEqual(16);
+
+      // Verify that database hash now matches sha256(qr_token)
+      const loan = await loansRepository.findLoanRecordById(
+        QA_IDS.loans.pending,
+      );
+      expect(loan?.qrTokenHash).toBe(sha256Hex(json.data.qr_token));
+    });
+
+    it('rotates token upon subsequent calls to GET /loans/:id/qr', async () => {
+      const { app, getMemberHeaders, loansRepository } = createTestHarness();
+      const headers = await getMemberHeaders();
+
+      // First call
+      const res1 = await app.handle(
+        new Request(
+          `http://localhost/api/v1/loans/${QA_IDS.loans.pending}/qr`,
+          {
+            method: 'GET',
+            headers,
+          },
+        ),
+      );
+      expect(res1.status).toBe(200);
+      const json1 = (await res1.json()) as { data: { qr_token: string } };
+
+      // Second call (rotates token)
+      const res2 = await app.handle(
+        new Request(
+          `http://localhost/api/v1/loans/${QA_IDS.loans.pending}/qr`,
+          {
+            method: 'GET',
+            headers,
+          },
+        ),
+      );
+      expect(res2.status).toBe(200);
+      const json2 = (await res2.json()) as { data: { qr_token: string } };
+
+      expect(json1.data.qr_token).not.toBe(json2.data.qr_token);
+
+      // Verify database has latest token hash
+      const loan = await loansRepository.findLoanRecordById(
+        QA_IDS.loans.pending,
+      );
+      expect(loan?.qrTokenHash).toBe(sha256Hex(json2.data.qr_token));
+    });
+
+    it('returns 403 when requesting QR for a loan belonging to another member (SEC-05)', async () => {
+      const { app, getMember2Headers } = createTestHarness();
+      const member2Headers = await getMember2Headers();
+
+      // QA_IDS.loans.pending belongs to member1
+      const res = await app.handle(
+        new Request(
+          `http://localhost/api/v1/loans/${QA_IDS.loans.pending}/qr`,
+          {
+            method: 'GET',
+            headers: member2Headers,
+          },
+        ),
+      );
+
+      expect(res.status).toBe(403);
+      const json = (await res.json()) as { code: string };
+      expect(json.code).toBe('forbidden');
+    });
+
+    it('returns 404 when loan does not exist', async () => {
+      const { app, getMemberHeaders } = createTestHarness();
+      const headers = await getMemberHeaders();
+
+      const res = await app.handle(
+        new Request(
+          'http://localhost/api/v1/loans/00000000-0000-4000-8003-999999999999/qr',
+          {
+            method: 'GET',
+            headers,
+          },
+        ),
+      );
+
+      expect(res.status).toBe(404);
+      const json = (await res.json()) as { code: string; message: string };
+      expect(json.code).toBe('not_found');
+      expect(json.message).toBe('Peminjaman tidak ditemukan.');
+    });
+
+    it('returns 422 invalid_state_transition when loan is not in PENDING status', async () => {
+      const { app, getMemberHeaders, loansRepository } = createTestHarness();
+      const headers = await getMemberHeaders();
+
+      // Add a BORROWED loan belonging to member1
+      const borrowedLoanId = '00000000-0000-4000-8003-000000000099';
+      loansRepository.addLoan({
+        id: borrowedLoanId,
+        loanNo: 'PJM-20261109-0099',
+        userId: QA_IDS.users.member1,
+        bookId: QA_IDS.books.bookA,
+        status: 'BORROWED',
+        requestedAt: new Date(),
+        confirmedAt: new Date(),
+        dueDate: '2026-11-16',
+        returnRequestedAt: null,
+        returnedAt: null,
+        lateDays: 0,
+        fineAmount: null,
+        fineStatus: 'Belum Bayar',
+        qrTokenHash: null,
+        qrConsumedAt: new Date(),
+      });
+
+      const res = await app.handle(
+        new Request(`http://localhost/api/v1/loans/${borrowedLoanId}/qr`, {
+          method: 'GET',
+          headers,
+        }),
+      );
+
+      expect(res.status).toBe(422);
+      const json = (await res.json()) as { code: string; message: string };
+      expect(json.code).toBe('invalid_state_transition');
+      expect(json.message).toBe(
+        'Peminjaman bukan berstatus Pending Peminjaman',
+      );
+    });
+
+    it('returns 404 when id in URL is not a valid UUID', async () => {
+      const { app, getMemberHeaders } = createTestHarness();
+      const headers = await getMemberHeaders();
+
+      const res = await app.handle(
+        new Request('http://localhost/api/v1/loans/not-a-valid-uuid/qr', {
+          method: 'GET',
+          headers,
+        }),
+      );
+
+      expect(res.status).toBe(404);
+    });
   });
 });

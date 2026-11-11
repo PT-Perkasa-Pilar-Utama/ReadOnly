@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import {
   bookGenres,
   books,
@@ -7,6 +8,8 @@ import {
   loans,
   notifications,
   QA_IDS,
+  QA_PENDING_QR_TOKEN,
+  sha256Hex,
   users,
 } from '@readonly/db';
 import {
@@ -16,6 +19,7 @@ import {
   type FineStatus,
   formatIndonesianDate,
   type LoanStatus,
+  type MyLoansQuery,
 } from '@readonly/shared';
 import {
   and,
@@ -30,6 +34,59 @@ import {
   type SQL,
   sql,
 } from 'drizzle-orm';
+
+export interface LoanBookRecord {
+  id: string;
+  title: string;
+  author: string;
+  availableCount: number;
+  coverPath: string | null;
+}
+
+export interface InsertLoanData {
+  loanNo: string;
+  userId: string;
+  bookId: string;
+  status: 'PENDING';
+  requestedAt: Date;
+  qrTokenHash: string;
+}
+
+export interface CreatedLoanRecord {
+  id: string;
+  loanNo: string;
+  status: 'PENDING';
+}
+
+export interface MyLoanListRecord {
+  id: string;
+  loanNo: string;
+  bookId: string;
+  bookTitle: string;
+  bookAuthor: string;
+  bookCoverPath: string | null;
+  requestedAt: Date;
+  dueDate: string | null;
+  status: LoanStatus;
+}
+
+export interface MyLoansQueryResult {
+  items: MyLoanListRecord[];
+  total: number;
+}
+
+export interface LoanRecord {
+  id: string;
+  loanNo: string;
+  userId: string;
+  bookId: string;
+  status: LoanStatus;
+  requestedAt: Date;
+  confirmedAt: Date | null;
+  dueDate: string | null;
+  qrTokenHash: string | null;
+  qrConsumedAt: Date | null;
+}
 
 export interface AdminLoanListRecord {
   id: string;
@@ -99,7 +156,26 @@ export interface TransitionToOverdueInput {
   dueDate: string;
 }
 
+export function formatLoanDatePrefix(date: Date): string {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  return formatter.format(date).replace(/-/g, '');
+}
+
 export interface LoansRepository {
+  findBookById(bookId: string): Promise<LoanBookRecord | null>;
+  generateLoanNo(date: Date): Promise<string>;
+  createLoan(data: InsertLoanData): Promise<CreatedLoanRecord>;
+  listMyLoans(
+    userId: string,
+    params: MyLoansQuery,
+  ): Promise<MyLoansQueryResult>;
+  findLoanRecordById(loanId: string): Promise<LoanRecord | null>;
+  updateQrTokenHash(loanId: string, qrTokenHash: string): Promise<void>;
   listAdminLoans(params: AdminLoansQuery): Promise<AdminLoansQueryResult>;
   findAdminLoanById(id: string): Promise<AdminLoanDetailRecord | null>;
   findLoanById(id: string): Promise<AdminLoanDetailRecord | null>;
@@ -109,6 +185,147 @@ export interface LoansRepository {
 
 export class DrizzleLoansRepository implements LoansRepository {
   constructor(private readonly db: Database) {}
+
+  async findBookById(bookId: string): Promise<LoanBookRecord | null> {
+    const [row] = await this.db
+      .select({
+        id: books.id,
+        title: books.title,
+        author: books.author,
+        availableCount: books.availableCount,
+        coverPath: books.coverPath,
+        deletedAt: books.deletedAt,
+      })
+      .from(books)
+      .where(eq(books.id, bookId));
+
+    if (!row || row.deletedAt !== null) {
+      return null;
+    }
+
+    return {
+      id: row.id,
+      title: row.title,
+      author: row.author,
+      availableCount: row.availableCount,
+      coverPath: row.coverPath,
+    };
+  }
+
+  async generateLoanNo(date: Date): Promise<string> {
+    const dateStr = formatLoanDatePrefix(date);
+    const prefix = `PJM-${dateStr}-`;
+
+    const [latestLoan] = await this.db
+      .select({ loanNo: loans.loanNo })
+      .from(loans)
+      .where(sql`${loans.loanNo} LIKE ${`${prefix}%`}`)
+      .orderBy(desc(loans.loanNo))
+      .limit(1);
+
+    let nextSeq = 1;
+    if (latestLoan?.loanNo) {
+      const suffix = latestLoan.loanNo.slice(prefix.length);
+      const parsed = parseInt(suffix, 10);
+      if (!Number.isNaN(parsed)) {
+        nextSeq = parsed + 1;
+      }
+    }
+
+    return `${prefix}${String(nextSeq).padStart(4, '0')}`;
+  }
+
+  async createLoan(data: InsertLoanData): Promise<CreatedLoanRecord> {
+    const [inserted] = await this.db
+      .insert(loans)
+      .values({
+        loanNo: data.loanNo,
+        userId: data.userId,
+        bookId: data.bookId,
+        status: data.status,
+        requestedAt: data.requestedAt,
+        qrTokenHash: data.qrTokenHash,
+        lateDays: 0,
+        fineStatus: 'Belum Bayar',
+      })
+      .returning({
+        id: loans.id,
+        loanNo: loans.loanNo,
+        status: loans.status,
+      });
+
+    return inserted as CreatedLoanRecord;
+  }
+
+  async listMyLoans(
+    userId: string,
+    params: MyLoansQuery,
+  ): Promise<MyLoansQueryResult> {
+    const [countRow] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(loans)
+      .where(eq(loans.userId, userId));
+
+    const total = countRow?.count ?? 0;
+    if (total === 0) {
+      return { items: [], total: 0 };
+    }
+
+    const rows = await this.db
+      .select({
+        id: loans.id,
+        loanNo: loans.loanNo,
+        bookId: books.id,
+        bookTitle: books.title,
+        bookAuthor: books.author,
+        bookCoverPath: books.coverPath,
+        requestedAt: loans.requestedAt,
+        dueDate: loans.dueDate,
+        status: loans.status,
+      })
+      .from(loans)
+      .innerJoin(books, eq(loans.bookId, books.id))
+      .where(eq(loans.userId, userId))
+      .orderBy(desc(loans.requestedAt), desc(loans.id))
+      .limit(params.limit)
+      .offset((params.page - 1) * params.limit);
+
+    return {
+      items: rows as MyLoanListRecord[],
+      total,
+    };
+  }
+
+  async findLoanRecordById(loanId: string): Promise<LoanRecord | null> {
+    const [row] = await this.db
+      .select({
+        id: loans.id,
+        loanNo: loans.loanNo,
+        userId: loans.userId,
+        bookId: loans.bookId,
+        status: loans.status,
+        requestedAt: loans.requestedAt,
+        confirmedAt: loans.confirmedAt,
+        dueDate: loans.dueDate,
+        qrTokenHash: loans.qrTokenHash,
+        qrConsumedAt: loans.qrConsumedAt,
+      })
+      .from(loans)
+      .where(eq(loans.id, loanId));
+
+    if (!row) {
+      return null;
+    }
+
+    return row as LoanRecord;
+  }
+
+  async updateQrTokenHash(loanId: string, qrTokenHash: string): Promise<void> {
+    await this.db
+      .update(loans)
+      .set({ qrTokenHash })
+      .where(eq(loans.id, loanId));
+  }
 
   async listAdminLoans(
     params: AdminLoansQuery,
@@ -310,36 +527,37 @@ export class DrizzleLoansRepository implements LoansRepository {
       await tx
         .insert(notifications)
         .values({
-          loanId: params.loanId,
           userId: params.userId,
+          loanId: params.loanId,
           type: 'OVERDUE',
           title: 'Buku melewati batas pengembalian',
           text: notifText,
           isRead: false,
           createdAt: params.now,
         })
-        .onConflictDoNothing({
-          target: [notifications.loanId, notifications.type],
-        });
+        .onConflictDoNothing();
     });
   }
 }
 
-interface InMemoryUser {
-  id: string;
-  fullName: string;
-  email: string;
-}
-
-interface InMemoryBook {
+export interface InMemoryBook {
   id: string;
   title: string;
   author: string;
-  publisher: string;
-  publicationYear: number;
-  synopsis: string;
+  publisher?: string;
+  publicationYear?: number;
+  synopsis?: string;
+  availableCount: number;
   coverPath: string | null;
-  genres: string[];
+  deletedAt?: Date | null;
+  genres?: string[];
+}
+
+export interface InMemoryUser {
+  id: string;
+  fullName: string;
+  email: string;
+  role?: 'member' | 'admin';
 }
 
 export interface InMemoryLoan {
@@ -356,6 +574,8 @@ export interface InMemoryLoan {
   lateDays: number;
   fineAmount: number | null;
   fineStatus: FineStatus;
+  qrTokenHash?: string | null;
+  qrConsumedAt?: Date | null;
 }
 
 export interface InMemoryLoanEvent {
@@ -369,8 +589,8 @@ export interface InMemoryLoanEvent {
 
 export interface InMemoryNotification {
   id: string;
-  loanId: string;
   userId: string;
+  loanId: string;
   type: 'DUE_SOON_3D' | 'DUE_TODAY' | 'OVERDUE';
   title: string;
   text: string;
@@ -394,9 +614,38 @@ export class InMemoryLoansRepository implements LoansRepository {
       id: QA_IDS.users.member1,
       fullName: 'Member Satu',
       email: 'member1@readonly.ppu.co.id',
+      role: 'member',
     };
     this.users.set(defaultUser.id, defaultUser);
 
+    const member2: InMemoryUser = {
+      id: QA_IDS.users.member2,
+      fullName: 'Siti Rahma',
+      email: 'member2@readonly.ppu.co.id',
+      role: 'member',
+    };
+    this.users.set(member2.id, member2);
+
+    const adminUser: InMemoryUser = {
+      id: QA_IDS.users.admin,
+      fullName: 'Admin Perpus QA',
+      email: 'admin@readonly.ppu.co.id',
+      role: 'admin',
+    };
+    this.users.set(adminUser.id, adminUser);
+
+    const bookA: InMemoryBook = {
+      id: QA_IDS.books.bookA,
+      title: 'Book-A: Clean Code',
+      author: 'Robert C. Martin',
+      publisher: 'Prentice Hall',
+      publicationYear: 2008,
+      synopsis: 'Panduan menulis kode yang bersih.',
+      availableCount: 3,
+      coverPath: 'clean-code.jpg',
+      deletedAt: null,
+      genres: ['Teknologi'],
+    };
     const bookB: InMemoryBook = {
       id: QA_IDS.books.bookB,
       title: 'Book-B: Clean Architecture',
@@ -404,7 +653,9 @@ export class InMemoryLoansRepository implements LoansRepository {
       publisher: 'Prentice Hall',
       publicationYear: 2017,
       synopsis: 'Buku B dengan pinjaman BORROWED aktif.',
+      availableCount: 2,
       coverPath: 'clean-arch.jpg',
+      deletedAt: null,
       genres: ['Teknologi'],
     };
     const bookC: InMemoryBook = {
@@ -414,7 +665,9 @@ export class InMemoryLoansRepository implements LoansRepository {
       publisher: 'Kompas',
       publicationYear: 2018,
       synopsis: 'Buku C dengan keterlambatan 1 hari.',
+      availableCount: 1,
       coverPath: null,
+      deletedAt: null,
       genres: ['Bisnis'],
     };
     const bookD: InMemoryBook = {
@@ -424,7 +677,9 @@ export class InMemoryLoansRepository implements LoansRepository {
       publisher: 'KPG',
       publicationYear: 2014,
       synopsis: 'Buku D dengan keterlambatan 4 hari.',
+      availableCount: 1,
       coverPath: null,
+      deletedAt: null,
       genres: ['Sejarah'],
     };
     const bookE: InMemoryBook = {
@@ -434,7 +689,9 @@ export class InMemoryLoansRepository implements LoansRepository {
       publisher: 'OReilly',
       publicationYear: 2017,
       synopsis: 'Buku E dengan keterlambatan 5 hari.',
+      availableCount: 1,
       coverPath: null,
+      deletedAt: null,
       genres: ['Teknologi'],
     };
     const bookF: InMemoryBook = {
@@ -444,7 +701,9 @@ export class InMemoryLoansRepository implements LoansRepository {
       publisher: 'Addison-Wesley',
       publicationYear: 2018,
       synopsis: 'Buku F dengan keterlambatan 6 hari.',
+      availableCount: 1,
       coverPath: null,
+      deletedAt: null,
       genres: ['Teknologi'],
     };
     const bookG: InMemoryBook = {
@@ -454,7 +713,9 @@ export class InMemoryLoansRepository implements LoansRepository {
       publisher: 'Bentang Pustaka',
       publicationYear: 2005,
       synopsis: 'Buku G berstatus Pending Pengembalian.',
+      availableCount: 1,
       coverPath: null,
+      deletedAt: null,
       genres: ['Fiksi'],
     };
     const bookH: InMemoryBook = {
@@ -464,6 +725,7 @@ export class InMemoryLoansRepository implements LoansRepository {
       publisher: 'KPG',
       publicationYear: 2017,
       synopsis: 'Buku H berstatus Pending Keterlambatan Belum Bayar.',
+      availableCount: 1,
       coverPath: 'laut-bercerita.jpg',
       genres: ['Drama', 'Fiksi'],
     };
@@ -474,6 +736,7 @@ export class InMemoryLoansRepository implements LoansRepository {
       publisher: 'Gramedia',
       publicationYear: 2019,
       synopsis: 'Buku I berstatus Pending Keterlambatan Sudah Bayar.',
+      availableCount: 1,
       coverPath: null,
       genres: ['Bisnis'],
     };
@@ -484,6 +747,7 @@ export class InMemoryLoansRepository implements LoansRepository {
       publisher: 'Gramedia',
       publicationYear: 2009,
       synopsis: 'Buku J sudah dikembalikan tepat waktu.',
+      availableCount: 1,
       coverPath: null,
       genres: ['Fiksi'],
     };
@@ -494,11 +758,25 @@ export class InMemoryLoansRepository implements LoansRepository {
       publisher: 'Bentang Pustaka',
       publicationYear: 2009,
       synopsis: 'Buku K sudah dikembalikan terlambat.',
+      availableCount: 1,
       coverPath: null,
       genres: ['Ensiklopedia Lama'],
     };
+    const bookEmpty: InMemoryBook = {
+      id: QA_IDS.books.bookEmpty,
+      title: 'Out of Stock Book',
+      author: 'Empty Stock Author',
+      publisher: 'Prentice Hall',
+      publicationYear: 2020,
+      synopsis: 'Buku dengan stok 0 untuk pengujian ketersediaan.',
+      availableCount: 0,
+      coverPath: null,
+      deletedAt: null,
+      genres: ['Teknologi'],
+    };
 
     for (const b of [
+      bookA,
       bookB,
       bookC,
       bookD,
@@ -509,6 +787,7 @@ export class InMemoryLoansRepository implements LoansRepository {
       bookI,
       bookJ,
       bookK,
+      bookEmpty,
     ]) {
       this.books.set(b.id, b);
     }
@@ -530,6 +809,8 @@ export class InMemoryLoansRepository implements LoansRepository {
       lateDays: 0,
       fineAmount: 0,
       fineStatus: 'Belum Bayar',
+      qrTokenHash: sha256Hex(QA_PENDING_QR_TOKEN),
+      qrConsumedAt: null,
     });
 
     // 2. QA-L-BORROW-0: BORROWED
@@ -547,6 +828,8 @@ export class InMemoryLoansRepository implements LoansRepository {
       lateDays: 0,
       fineAmount: 0,
       fineStatus: 'Belum Bayar',
+      qrTokenHash: null,
+      qrConsumedAt: baseDate,
     });
 
     // 3. QA-L-OVER-1: OVERDUE, late_days = 1, fine_amount = 2000
@@ -564,6 +847,8 @@ export class InMemoryLoansRepository implements LoansRepository {
       lateDays: 1,
       fineAmount: 2000,
       fineStatus: 'Belum Bayar',
+      qrTokenHash: null,
+      qrConsumedAt: baseDate,
     });
 
     // 4. QA-L-OVER-4: OVERDUE, late_days = 4, fine_amount = 2000
@@ -581,6 +866,8 @@ export class InMemoryLoansRepository implements LoansRepository {
       lateDays: 4,
       fineAmount: 2000,
       fineStatus: 'Belum Bayar',
+      qrTokenHash: null,
+      qrConsumedAt: baseDate,
     });
 
     // 5. QA-L-OVER-5: OVERDUE, late_days = 5, fine_amount = null
@@ -598,6 +885,8 @@ export class InMemoryLoansRepository implements LoansRepository {
       lateDays: 5,
       fineAmount: null,
       fineStatus: 'Belum Bayar',
+      qrTokenHash: null,
+      qrConsumedAt: baseDate,
     });
 
     // 6. QA-L-OVER-6: OVERDUE, late_days = 6, fine_amount = null
@@ -615,9 +904,11 @@ export class InMemoryLoansRepository implements LoansRepository {
       lateDays: 6,
       fineAmount: null,
       fineStatus: 'Belum Bayar',
+      qrTokenHash: null,
+      qrConsumedAt: baseDate,
     });
 
-    // 7. QA-L-RET-PEND: RETURN_PENDING, late_days = 0
+    // 7. QA-L-RET-PEND: RETURN_PENDING
     this.loans.push({
       id: QA_IDS.loans.retPend,
       loanNo: 'PJM-20261109-0007',
@@ -626,15 +917,17 @@ export class InMemoryLoansRepository implements LoansRepository {
       status: 'RETURN_PENDING',
       requestedAt: new Date(baseDate.getTime() - 4 * 60 * 1000),
       confirmedAt: baseDate,
-      dueDate: '2026-11-09',
+      dueDate: '2026-11-16',
       returnRequestedAt: baseDate,
       returnedAt: null,
       lateDays: 0,
       fineAmount: 0,
       fineStatus: 'Belum Bayar',
+      qrTokenHash: null,
+      qrConsumedAt: baseDate,
     });
 
-    // 8. QA-L-FINE-PEND: FINE_PENDING, late_days = 5, Belum Bayar
+    // 8. QA-L-FINE-PEND: FINE_PENDING, late_days = 5, fine_amount = null, Belum Bayar
     this.loans.push({
       id: QA_IDS.loans.finePend,
       loanNo: 'PJM-20261109-0008',
@@ -649,6 +942,8 @@ export class InMemoryLoansRepository implements LoansRepository {
       lateDays: 5,
       fineAmount: null,
       fineStatus: 'Belum Bayar',
+      qrTokenHash: null,
+      qrConsumedAt: baseDate,
     });
 
     // 9. QA-L-FINE-PAID: FINE_PENDING, late_days = 5, fine_amount = 15000, Sudah Bayar
@@ -666,6 +961,8 @@ export class InMemoryLoansRepository implements LoansRepository {
       lateDays: 5,
       fineAmount: 15000,
       fineStatus: 'Sudah Bayar',
+      qrTokenHash: null,
+      qrConsumedAt: baseDate,
     });
 
     // 10. QA-L-RETURNED-ON: RETURNED, late_days = 0
@@ -683,6 +980,8 @@ export class InMemoryLoansRepository implements LoansRepository {
       lateDays: 0,
       fineAmount: 0,
       fineStatus: 'Belum Bayar',
+      qrTokenHash: null,
+      qrConsumedAt: baseDate,
     });
 
     // 11. QA-L-RETURNED-LATE: RETURNED, late_days = 3, fine = 2000
@@ -700,7 +999,123 @@ export class InMemoryLoansRepository implements LoansRepository {
       lateDays: 3,
       fineAmount: 2000,
       fineStatus: 'Sudah Bayar',
+      qrTokenHash: null,
+      qrConsumedAt: baseDate,
     });
+  }
+
+  async findBookById(bookId: string): Promise<LoanBookRecord | null> {
+    const book = this.books.get(bookId);
+    if (!book || book.deletedAt !== null) {
+      return null;
+    }
+    return {
+      id: book.id,
+      title: book.title,
+      author: book.author,
+      availableCount: book.availableCount ?? 1,
+      coverPath: book.coverPath,
+    };
+  }
+
+  async generateLoanNo(date: Date): Promise<string> {
+    const dateStr = formatLoanDatePrefix(date);
+    const prefix = `PJM-${dateStr}-`;
+
+    const matchingLoans = this.loans.filter((l) => l.loanNo.startsWith(prefix));
+    let maxSeq = 0;
+    for (const loan of matchingLoans) {
+      const suffix = loan.loanNo.slice(prefix.length);
+      const parsed = parseInt(suffix, 10);
+      if (!Number.isNaN(parsed) && parsed > maxSeq) {
+        maxSeq = parsed;
+      }
+    }
+
+    return `${prefix}${String(maxSeq + 1).padStart(4, '0')}`;
+  }
+
+  async createLoan(data: InsertLoanData): Promise<CreatedLoanRecord> {
+    const newLoan: InMemoryLoan = {
+      id: crypto.randomUUID(),
+      loanNo: data.loanNo,
+      userId: data.userId,
+      bookId: data.bookId,
+      status: data.status,
+      requestedAt: data.requestedAt,
+      confirmedAt: null,
+      dueDate: null,
+      returnRequestedAt: null,
+      returnedAt: null,
+      lateDays: 0,
+      fineAmount: null,
+      fineStatus: 'Belum Bayar',
+      qrTokenHash: data.qrTokenHash,
+      qrConsumedAt: null,
+    };
+
+    this.loans.push(newLoan);
+
+    return {
+      id: newLoan.id,
+      loanNo: newLoan.loanNo,
+      status: 'PENDING',
+    };
+  }
+
+  async listMyLoans(
+    userId: string,
+    params: MyLoansQuery,
+  ): Promise<MyLoansQueryResult> {
+    const userLoans = this.loans.filter((l) => l.userId === userId);
+    userLoans.sort((a, b) => b.requestedAt.getTime() - a.requestedAt.getTime());
+
+    const total = userLoans.length;
+    const offset = (params.page - 1) * params.limit;
+    const paginated = userLoans.slice(offset, offset + params.limit);
+
+    const items: MyLoanListRecord[] = paginated.map((loan) => {
+      const book = this.books.get(loan.bookId);
+      return {
+        id: loan.id,
+        loanNo: loan.loanNo,
+        bookId: loan.bookId,
+        bookTitle: book?.title ?? 'Unknown Book',
+        bookAuthor: book?.author ?? 'Unknown Author',
+        bookCoverPath: book?.coverPath ?? null,
+        requestedAt: loan.requestedAt,
+        dueDate: loan.dueDate,
+        status: loan.status,
+      };
+    });
+
+    return { items, total };
+  }
+
+  async findLoanRecordById(loanId: string): Promise<LoanRecord | null> {
+    const loan = this.loans.find((l) => l.id === loanId);
+    if (!loan) {
+      return null;
+    }
+    return {
+      id: loan.id,
+      loanNo: loan.loanNo,
+      userId: loan.userId,
+      bookId: loan.bookId,
+      status: loan.status,
+      requestedAt: loan.requestedAt,
+      confirmedAt: loan.confirmedAt,
+      dueDate: loan.dueDate,
+      qrTokenHash: loan.qrTokenHash ?? null,
+      qrConsumedAt: loan.qrConsumedAt ?? null,
+    };
+  }
+
+  async updateQrTokenHash(loanId: string, qrTokenHash: string): Promise<void> {
+    const loan = this.loans.find((l) => l.id === loanId);
+    if (loan) {
+      loan.qrTokenHash = qrTokenHash;
+    }
   }
 
   async listAdminLoans(
@@ -795,18 +1210,6 @@ export class InMemoryLoansRepository implements LoansRepository {
     };
   }
 
-  addLoan(loan: InMemoryLoan): void {
-    this.loans.push(loan);
-  }
-
-  addBook(book: InMemoryBook): void {
-    this.books.set(book.id, book);
-  }
-
-  addUser(user: InMemoryUser): void {
-    this.users.set(user.id, user);
-  }
-
   async findLoanById(id: string): Promise<AdminLoanDetailRecord | null> {
     return this.findAdminLoanById(id);
   }
@@ -863,8 +1266,8 @@ export class InMemoryLoansRepository implements LoansRepository {
       const formattedDueDate = formatIndonesianDate(params.dueDate);
       this.notifications.push({
         id: crypto.randomUUID(),
-        loanId: params.loanId,
         userId: params.userId,
+        loanId: params.loanId,
         type: 'OVERDUE',
         title: 'Buku melewati batas pengembalian',
         text: `${params.bookTitle} jatuh tempo pada ${formattedDueDate}. Segera ajukan pengembalian.`,
@@ -874,21 +1277,33 @@ export class InMemoryLoansRepository implements LoansRepository {
     }
   }
 
-  getLoanEvents(loanId?: string): InMemoryLoanEvent[] {
+  addBook(book: InMemoryBook): void {
+    this.books.set(book.id, book);
+  }
+
+  addUser(user: InMemoryUser): void {
+    this.users.set(user.id, user);
+  }
+
+  addLoan(loan: InMemoryLoan): void {
+    this.loans.push(loan);
+  }
+
+  getLoans(): readonly InMemoryLoan[] {
+    return this.loans;
+  }
+
+  getLoanEvents(loanId?: string): readonly InMemoryLoanEvent[] {
     if (loanId) {
       return this.loanEvents.filter((e) => e.loanId === loanId);
     }
-    return [...this.loanEvents];
+    return this.loanEvents;
   }
 
-  getNotifications(loanId?: string): InMemoryNotification[] {
+  getNotifications(loanId?: string): readonly InMemoryNotification[] {
     if (loanId) {
       return this.notifications.filter((n) => n.loanId === loanId);
     }
-    return [...this.notifications];
-  }
-
-  getLoans(): InMemoryLoan[] {
-    return [...this.loans];
+    return this.notifications;
   }
 }
