@@ -53,11 +53,10 @@ export function LoanManagementPage() {
     queryFn: ({ signal }) => {
       const search = debouncedSearch();
       const status = appliedStatus();
-
       return getAdminLoans(
         {
           ...(search ? { q: search } : {}),
-          ...(status !== '' ? { status } : {}),
+          ...(status ? { status } : {}),
           page: page(),
           limit: 10,
         },
@@ -91,11 +90,11 @@ export function LoanManagementPage() {
     <div class="loan-management-app">
       <AdminHeader activeSection="loans" />
 
-      <main class="loan-management-main">
+      <main class="loan-management-main loan-management-main--list">
         <section class="loan-management-heading">
           <div>
             <h1>Manajemen Peminjaman</h1>
-            <p>Kelola dan pantau peminjaman buku perpustakaan</p>
+            <p>Periksa status peminjaman dan proses pengembalian buku.</p>
           </div>
         </section>
 
@@ -111,7 +110,6 @@ export function LoanManagementPage() {
                 aria-label="Cari nomor peminjaman, nama peminjam, atau judul buku"
               />
             </label>
-
             <label class="loan-management-filter">
               <span>Status</span>
               <select
@@ -129,7 +127,6 @@ export function LoanManagementPage() {
                 </For>
               </select>
             </label>
-
             <button
               class="loan-management-button loan-management-button--primary"
               type="button"
@@ -164,12 +161,13 @@ export function LoanManagementPage() {
               <table class="loan-management-table">
                 <thead>
                   <tr>
-                    <th scope="col">Buku</th>
-                    <th scope="col">Peminjam</th>
+                    <th scope="col">Cover</th>
+                    <th scope="col">Judul Buku</th>
+                    <th scope="col">Nama Peminjam</th>
                     <th scope="col">Tanggal Peminjaman</th>
                     <th scope="col">Batas Pengembalian</th>
                     <th scope="col">Status</th>
-                    <th scope="col">Aksi</th>
+                    <th scope="col">Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -177,7 +175,7 @@ export function LoanManagementPage() {
                     when={(loansQuery.data?.loans.length ?? 0) > 0}
                     fallback={
                       <tr>
-                        <td class="loan-management-empty" colSpan={6}>
+                        <td class="loan-management-empty" colSpan={7}>
                           Tidak ada data peminjaman
                         </td>
                       </tr>
@@ -187,24 +185,19 @@ export function LoanManagementPage() {
                       {(loan) => (
                         <tr>
                           <td>
-                            <div class="loan-book-cell">
-                              <div class="loan-book-cover">
-                                <Show
-                                  when={loan.book_cover_url}
-                                  fallback={<span aria-hidden="true">▤</span>}
-                                >
-                                  <img
-                                    src={loan.book_cover_url ?? ''}
-                                    alt={`Cover ${loan.book_title}`}
-                                  />
-                                </Show>
-                              </div>
-                              <div class="loan-book-meta">
-                                <strong>{loan.book_title}</strong>
-                                <small>{loan.loan_no}</small>
-                              </div>
+                            <div class="loan-book-cover">
+                              <Show
+                                when={loan.book_cover_url}
+                                fallback={<span aria-hidden="true">▤</span>}
+                              >
+                                <img
+                                  src={loan.book_cover_url ?? ''}
+                                  alt={`Cover ${loan.book_title}`}
+                                />
+                              </Show>
                             </div>
                           </td>
+                          <td class="loan-book-title">{loan.book_title}</td>
                           <td>{loan.borrower_name}</td>
                           <td>{formatLoanDate(loan.confirmed_at)}</td>
                           <td>{formatLoanDate(loan.due_date)}</td>
@@ -244,53 +237,55 @@ export function LoanManagementPage() {
                 </tbody>
               </table>
             </div>
-
-            <div class="loan-management-footer">
-              <p>
-                Menampilkan {loansQuery.data?.loans.length ?? 0} dari{' '}
-                {totalLoans()} peminjaman
-              </p>
-              <nav
-                class="loan-management-pagination"
-                aria-label="Paginasi daftar peminjaman"
-              >
-                <button
-                  type="button"
-                  aria-label="Halaman sebelumnya"
-                  disabled={currentPage() <= 1}
-                  onClick={() => setPage((value) => Math.max(1, value - 1))}
-                >
-                  ‹
-                </button>
-                <For each={visiblePageNumbers()}>
-                  {(pageNumber) => (
-                    <button
-                      type="button"
-                      classList={{ 'is-current': pageNumber === currentPage() }}
-                      aria-label={`Halaman ${pageNumber}`}
-                      aria-current={
-                        pageNumber === currentPage() ? 'page' : undefined
-                      }
-                      onClick={() => setPage(pageNumber)}
-                    >
-                      {pageNumber}
-                    </button>
-                  )}
-                </For>
-                <button
-                  type="button"
-                  aria-label="Halaman berikutnya"
-                  disabled={totalPages() === 0 || currentPage() >= totalPages()}
-                  onClick={() =>
-                    setPage((value) => Math.min(totalPages(), value + 1))
-                  }
-                >
-                  ›
-                </button>
-              </nav>
-            </div>
           </Show>
         </section>
+
+        <Show when={!loansQuery.isPending && !loansQuery.isError}>
+          <div class="loan-management-footer">
+            <p>
+              Menampilkan {loansQuery.data?.loans.length ?? 0} dari{' '}
+              {totalLoans()} peminjaman.
+            </p>
+            <nav
+              class="loan-management-pagination"
+              aria-label="Paginasi daftar peminjaman"
+            >
+              <button
+                type="button"
+                aria-label="Halaman sebelumnya"
+                disabled={currentPage() <= 1}
+                onClick={() => setPage((value) => Math.max(1, value - 1))}
+              >
+                ‹
+              </button>
+              <For each={visiblePageNumbers()}>
+                {(pageNumber) => (
+                  <button
+                    type="button"
+                    classList={{ 'is-current': pageNumber === currentPage() }}
+                    aria-label={`Halaman ${pageNumber}`}
+                    aria-current={
+                      pageNumber === currentPage() ? 'page' : undefined
+                    }
+                    onClick={() => setPage(pageNumber)}
+                  >
+                    {pageNumber}
+                  </button>
+                )}
+              </For>
+              <button
+                type="button"
+                aria-label="Halaman berikutnya"
+                disabled={totalPages() === 0 || currentPage() >= totalPages()}
+                onClick={() =>
+                  setPage((value) => Math.min(totalPages(), value + 1))
+                }
+              >
+                ›
+              </button>
+            </nav>
+          </div>
+        </Show>
       </main>
     </div>
   );

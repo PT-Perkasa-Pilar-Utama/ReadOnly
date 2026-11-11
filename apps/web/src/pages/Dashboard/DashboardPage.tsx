@@ -46,6 +46,18 @@ const METRIC_CARDS: Array<{
   },
 ];
 
+const EMPTY_DASHBOARD_SUMMARY: DashboardSummary = {
+  totalBooks: 0,
+  totalAvailability: 0,
+  borrowedCount: 0,
+  overdueCount: 0,
+  returnedCount: 0,
+  pieChart: {
+    onTime: 0,
+    late: 0,
+  },
+};
+
 const numberFormatter = new Intl.NumberFormat('id-ID');
 const percentFormatter = new Intl.NumberFormat('id-ID', {
   maximumFractionDigits: 1,
@@ -63,6 +75,15 @@ export function DashboardPage() {
     queryFn: ({ signal }) => getDashboardSummary(signal),
     staleTime: 30_000,
   }));
+
+  const summary = () => summaryQuery.data ?? EMPTY_DASHBOARD_SUMMARY;
+  const distribution = () => getReturnDistribution(summary().pieChart);
+  const onTimeShare = () => distribution().onTimePercentage;
+  const returnedTransactions = () => distribution().total;
+  const chartBackground = () =>
+    distribution().total === 0
+      ? 'conic-gradient(var(--dashboard-chart-empty) 0% 100%)'
+      : `conic-gradient(var(--dashboard-primary) 0% ${onTimeShare()}%, var(--dashboard-chart-late) ${onTimeShare()}% 100%)`;
 
   return (
     <div class="dashboard-app">
@@ -96,12 +117,6 @@ export function DashboardPage() {
           </div>
         </section>
 
-        <Show when={summaryQuery.isPending}>
-          <section class="dashboard-state" aria-live="polite" aria-busy="true">
-            <span class="dashboard-loader" aria-hidden="true" />
-          </section>
-        </Show>
-
         <Show when={summaryQuery.isError}>
           <section class="dashboard-state dashboard-state--error" role="alert">
             {summaryQuery.error instanceof Error
@@ -110,119 +125,92 @@ export function DashboardPage() {
           </section>
         </Show>
 
-        <Show when={summaryQuery.data}>
-          {(summary) => {
-            const distribution = () =>
-              getReturnDistribution(summary().pieChart);
+        <section
+          class="dashboard-metrics"
+          aria-label="Ringkasan peminjaman buku"
+        >
+          <For each={METRIC_CARDS}>
+            {(metric) => (
+              <article class="dashboard-metric-card">
+                <h2>{metric.label}</h2>
 
-            const onTimeShare = () => distribution().onTimePercentage;
+                <p class="dashboard-metric-card__value">
+                  {numberFormatter.format(metric.value(summary()))}
+                </p>
 
-            const returnedTransactions = () =>
-              summary().pieChart.onTime + summary().pieChart.late;
+                <p class="dashboard-metric-card__description">
+                  {metric.description}
+                </p>
+              </article>
+            )}
+          </For>
+        </section>
 
-            const chartBackground = () =>
-              distribution().total === 0
-                ? 'conic-gradient(var(--dashboard-chart-empty) 0% 100%)'
-                : `conic-gradient(var(--dashboard-primary) 0% ${onTimeShare()}%, var(--dashboard-chart-late) ${onTimeShare()}% 100%)`;
+        <section
+          class="dashboard-chart-card"
+          aria-label="Ketepatan Pengembalian"
+        >
+          <div class="dashboard-chart-heading">
+            <h2>Ketepatan Pengembalian</h2>
 
-            return (
-              <>
-                <section
-                  class="dashboard-metrics"
-                  aria-label="Ringkasan peminjaman buku"
-                >
-                  <For each={METRIC_CARDS}>
-                    {(metric) => (
-                      <article class="dashboard-metric-card">
-                        <h2>{metric.label}</h2>
+            <p>
+              Dari {numberFormatter.format(returnedTransactions())} transaksi
+              yang sudah dikembalikan
+            </p>
+          </div>
 
-                        <p class="dashboard-metric-card__value">
-                          {numberFormatter.format(metric.value(summary()))}
-                        </p>
+          <div class="dashboard-chart-content">
+            <div
+              class="dashboard-pie-chart"
+              role="img"
+              aria-label={`Pengembalian tepat waktu ${numberFormatter.format(summary().pieChart.onTime)}, pengembalian terlambat ${numberFormatter.format(summary().pieChart.late)}.`}
+              style={{ background: chartBackground() }}
+            />
 
-                        <p class="dashboard-metric-card__description">
-                          {metric.description}
-                        </p>
-                      </article>
-                    )}
-                  </For>
-                </section>
+            <fieldset
+              class="dashboard-chart-legend"
+              aria-label="Keterangan grafik"
+            >
+              <div class="dashboard-chart-legend__item">
+                <span
+                  class="dashboard-chart-legend__dot dashboard-chart-legend__dot--on-time"
+                  aria-hidden="true"
+                />
 
-                <section
-                  class="dashboard-chart-card"
-                  aria-label="Ketepatan Pengembalian"
-                >
-                  <div class="dashboard-chart-heading">
-                    <h2>Ketepatan Pengembalian</h2>
+                <div class="dashboard-chart-legend__copy">
+                  <span>Pengembalian tepat waktu</span>
+                  <small>
+                    {numberFormatter.format(summary().pieChart.onTime)}
+                    {'·'}
+                    transaksi
+                  </small>
+                </div>
 
-                    <p>
-                      Dari {numberFormatter.format(returnedTransactions())}{' '}
-                      transaksi yang sudah dikembalikan
-                    </p>
-                  </div>
+                <strong>
+                  {percentFormatter.format(distribution().onTimePercentage)}%
+                </strong>
+              </div>
 
-                  <div class="dashboard-chart-content">
-                    <div
-                      class="dashboard-pie-chart"
-                      role="img"
-                      aria-label={`Pengembalian tepat waktu ${numberFormatter.format(summary().pieChart.onTime)}, pengembalian terlambat ${numberFormatter.format(summary().pieChart.late)}.`}
-                      style={{ background: chartBackground() }}
-                    />
+              <div class="dashboard-chart-legend__item">
+                <span
+                  class="dashboard-chart-legend__dot dashboard-chart-legend__dot--late"
+                  aria-hidden="true"
+                />
 
-                    <fieldset
-                      class="dashboard-chart-legend"
-                      aria-label="Keterangan grafik"
-                    >
-                      <div class="dashboard-chart-legend__item">
-                        <span
-                          class="dashboard-chart-legend__dot dashboard-chart-legend__dot--on-time"
-                          aria-hidden="true"
-                        />
+                <div class="dashboard-chart-legend__copy">
+                  <span>Pengembalian terlambat</span>
+                  <small>
+                    {numberFormatter.format(summary().pieChart.late)} transaksi
+                  </small>
+                </div>
 
-                        <div class="dashboard-chart-legend__copy">
-                          <span>Pengembalian tepat waktu</span>
-                          <small>
-                            {numberFormatter.format(summary().pieChart.onTime)}{' '}
-                            transaksi
-                          </small>
-                        </div>
-
-                        <strong>
-                          {percentFormatter.format(
-                            distribution().onTimePercentage,
-                          )}
-                          %
-                        </strong>
-                      </div>
-
-                      <div class="dashboard-chart-legend__item">
-                        <span
-                          class="dashboard-chart-legend__dot dashboard-chart-legend__dot--late"
-                          aria-hidden="true"
-                        />
-
-                        <div class="dashboard-chart-legend__copy">
-                          <span>Pengembalian terlambat</span>
-                          <small>
-                            {numberFormatter.format(summary().pieChart.late)}{' '}
-                            transaksi
-                          </small>
-                        </div>
-
-                        <strong>
-                          {percentFormatter.format(
-                            distribution().latePercentage,
-                          )}
-                          %
-                        </strong>
-                      </div>
-                    </fieldset>
-                  </div>
-                </section>
-              </>
-            );
-          }}
-        </Show>
+                <strong>
+                  {percentFormatter.format(distribution().latePercentage)}%
+                </strong>
+              </div>
+            </fieldset>
+          </div>
+        </section>
       </main>
     </div>
   );

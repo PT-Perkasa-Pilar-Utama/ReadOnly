@@ -14,6 +14,7 @@ import {
   getLoanStatusLabel,
 } from '../../api/loans';
 import { AdminHeader } from '../../components/AdminHeader';
+import { requestAdminConfirmation } from '../../components/admin-feedback-store';
 import { notify } from '../../components/Feedback';
 import Modal from '../../components/Modal';
 import './LoanManagementPage.css';
@@ -60,7 +61,7 @@ export function LoanDetailPage(props: LoanDetailPageProps) {
     const detail = loan();
     if (!detail?.can_confirm_return || processingAction()) return;
 
-    const confirmed = window.confirm(
+    const confirmed = await requestAdminConfirmation(
       `Apakah Anda yakin ${detail.borrower.full_name} telah ` +
         'mengembalikan Buku?',
     );
@@ -96,7 +97,7 @@ export function LoanDetailPage(props: LoanDetailPageProps) {
     const amount = detail.fine_amount;
     if (amount === null) return;
 
-    const confirmed = window.confirm(
+    const confirmed = await requestAdminConfirmation(
       `Denda ${detail.borrower.full_name} adalah ` +
         `${formatLoanAmount(amount)}. ` +
         'Apakah benar telah dibayar?',

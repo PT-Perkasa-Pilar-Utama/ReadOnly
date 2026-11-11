@@ -6,6 +6,7 @@ const [notice, setNotice] = createSignal<{
   kind: 'success' | 'error';
 } | null>(null);
 let timeout: ReturnType<typeof setTimeout> | undefined;
+
 export function notify(message: string, kind: 'success' | 'error' = 'success') {
   clearTimeout(timeout);
   setNotice({ message, kind });
@@ -28,7 +29,10 @@ export function ToastRegion() {
               class="icon-button"
               type="button"
               aria-label="Tutup pesan"
-              onClick={() => setNotice(null)}
+              onClick={() => {
+                clearTimeout(timeout);
+                setNotice(null);
+              }}
             >
               <Icon name="close" size={16} />
             </button>

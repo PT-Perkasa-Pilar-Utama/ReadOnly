@@ -5,7 +5,7 @@
 }
 
 .master-genres-main {
-  width: min(100% - 80px, 1380px);
+  width: min(100% - 128px, 1380px);
   margin: 0 auto;
   padding: 32px 0 58px;
 }
@@ -37,13 +37,13 @@
 
 .master-genres-button {
   display: inline-flex;
-  min-height: 37px;
+  min-height: 42px;
   align-items: center;
   justify-content: center;
   gap: 8px;
   padding: 0 17px;
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: 12px;
   cursor: pointer;
   font-size: 11px;
   font-weight: 700;
@@ -63,6 +63,19 @@
   background: var(--wine-dark);
 }
 
+.master-genres-button--filter {
+  min-width: 112px;
+  min-height: 42px;
+  padding: 0 18px;
+  background: var(--wine);
+  color: #fff;
+  white-space: nowrap;
+}
+
+.master-genres-button--filter:hover:not(:disabled) {
+  background: var(--wine-dark);
+}
+
 .master-genres-button--primary > span {
   font-size: 18px;
   font-weight: 400;
@@ -72,19 +85,26 @@
 .master-genres-panel {
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 7px;
+  border-radius: 12px;
   background: #fff;
   box-shadow: 0 2px 9px rgb(60 38 30 / 3%);
 }
 
 .master-genres-toolbar {
-  padding: 17px 19px 16px;
-  border-bottom: 1px solid #eee8e2;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 20px;
 }
 
 .master-genres-search {
   display: grid;
-  width: min(100%, 520px);
+  width: 100%;
   min-width: 0;
   gap: 6px;
 }
@@ -100,10 +120,10 @@
 .master-genres-form-field input {
   width: 100%;
   min-width: 0;
-  min-height: 36px;
+  min-height: 42px;
   padding: 8px 10px;
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: 12px;
   outline: none;
   background: #fff;
   color: #342d2b;
@@ -133,19 +153,19 @@
 }
 
 .master-genres-table th {
-  padding: 12px 15px;
+  padding: 14px 18px;
   border-bottom: 1px solid #e8e1e5;
   color: #5d5052;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
 }
 
 .master-genres-table td {
-  padding: 12px 15px;
+  padding: 14px 18px;
   border-bottom: 1px solid #f0ebe7;
   color: #625956;
-  font-size: 11px;
+  font-size: 12px;
   vertical-align: middle;
 }
 
@@ -167,8 +187,8 @@
   min-height: 23px;
   align-items: center;
   padding: 3px 9px;
-  border-radius: 4px;
-  font-size: 10px;
+  border-radius: 12px;
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -178,23 +198,27 @@
 }
 
 .master-genres-status--inactive {
-  background: #f2ece7;
-  color: #77675d;
+  background: #fff0f0;
+  color: #a8424a;
 }
 
 .master-genres-actions {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
 }
 
 .master-genres-action {
-  min-height: 28px;
-  padding: 4px 8px;
-  border: 1px solid #ded4cb;
-  border-radius: 4px;
-  background: #fff;
-  color: #5f5551;
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: #7b4454;
   cursor: pointer;
   font: inherit;
   font-size: 10px;
@@ -203,6 +227,31 @@
 
 .master-genres-action:hover:not(:disabled) {
   background: #fbf8f4;
+  border-color: #ead9de;
+}
+
+.master-genres-action svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+
+.master-genres-table th:last-child,
+.master-genres-table td:last-child {
+  text-align: right;
+}
+
+.master-genres-app .pagination {
+  border-radius: 12px;
+}
+
+.master-genres-app .pagination button {
+  height: 42px;
+  border-radius: 12px;
 }
 
 .master-genres-action:disabled {
@@ -211,8 +260,12 @@
 }
 
 .master-genres-action--delete {
-  border-color: #ead3d5;
   color: #963348;
+}
+
+.master-genres-action--delete:hover:not(:disabled) {
+  border-color: #f0dada;
+  background: #fff5f5;
 }
 
 .master-genres-empty {
@@ -265,5 +318,13 @@
 
   .master-genres-heading {
     align-items: flex-start;
+  }
+
+  .master-genres-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .master-genres-button--filter {
+    width: 100%;
   }
 }
