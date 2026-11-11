@@ -57,7 +57,7 @@ export default function UsersPage() {
         <div>
           <span class="eyebrow">ADMIN PERPUS</span>
           <h1>Management User</h1>
-          <p>Kelola akun Admin dan Member perpustakaan.</p>
+          <p>Kelola pengguna ReadOnly.</p>
         </div>
         <Link to="/admin/users/add" class="button">
           <Icon name="plus" size={17} />

@@ -1,6 +1,7 @@
-import { Link, Outlet, useNavigate } from '@tanstack/solid-router';
+import { Link, Outlet, useLocation, useNavigate } from '@tanstack/solid-router';
 import { createSignal, Show } from 'solid-js';
 import { currentUser, endSession } from '../lib/session';
+import { AdminHeader } from './AdminHeader';
 import DemoBanner from './DemoBanner';
 import { notify } from './Feedback';
 import Icon from './Icon';
@@ -8,6 +9,7 @@ import { NotificationsMenu, ReminderHost } from './Notifications';
 
 export default function AppLayout() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [busy, setBusy] = createSignal(false);
   async function signOut() {
     if (busy()) return;
@@ -29,59 +31,58 @@ export default function AppLayout() {
   return (
     <>
       <DemoBanner />
-      <header class="app-header">
-        <div class="header-inner">
-          <Link
-            to={currentUser()?.role === 'admin' ? '/dashboard' : '/home'}
-            class="wordmark"
-          >
-            ReadOnly
-          </Link>
-          <nav class="main-nav" aria-label="Navigasi utama">
-            <Show
-              when={currentUser()?.role === 'member'}
-              fallback={
-                <>
-                  <Link to="/dashboard" activeProps={{ class: 'active' }}>
-                    Dashboard
-                  </Link>
-                  <Link to="/admin/users" activeProps={{ class: 'active' }}>
-                    Management User
-                  </Link>
-                </>
-              }
-            >
-              <Link to="/home" activeProps={{ class: 'active' }}>
-                Home
+      {/* AC-12.01: satu navbar Admin yang sama pada daftar user dan popup tambah/edit. */}
+      <Show
+        when={currentUser()?.role === 'admin'}
+        fallback={
+          <header class="app-header">
+            <div class="header-inner">
+              <Link to="/home" class="wordmark">
+                ReadOnly
               </Link>
-              <Link to="/loans" activeProps={{ class: 'active' }}>
-                Pinjaman
-              </Link>
-            </Show>
-          </nav>
-          <div class="header-account">
-            <Show when={currentUser()?.role === 'member'}>
-              <NotificationsMenu />
-            </Show>
-            {/* AC-02.01: email selalu tampil di kanan atas, termasuk pada layar kecil. */}
-            <div class="account-label">
-              <span>{currentUser()?.full_name}</span>
-              <span>{currentUser()?.email}</span>
+              <nav class="main-nav" aria-label="Navigasi utama">
+                <Link to="/home" activeProps={{ class: 'active' }}>
+                  Home
+                </Link>
+                <Link to="/loans" activeProps={{ class: 'active' }}>
+                  Pinjaman
+                </Link>
+              </nav>
+              <div class="header-account">
+                <Show when={currentUser()?.role === 'member'}>
+                  <NotificationsMenu />
+                </Show>
+                {/* AC-02.01: email selalu tampil di kanan atas, termasuk pada layar kecil. */}
+                <div class="account-label">
+                  <span>{currentUser()?.full_name}</span>
+                  <span>{currentUser()?.email}</span>
+                </div>
+                <button
+                  type="button"
+                  class="logout-button"
+                  aria-label="Logout"
+                  title="Logout"
+                  disabled={busy()}
+                  onClick={signOut}
+                >
+                  <Icon name="logout" size={20} />
+                  <span>Logout</span>
+                </button>
+              </div>
             </div>
-            <button
-              type="button"
-              class="logout-button"
-              aria-label="Logout"
-              title="Logout"
-              disabled={busy()}
-              onClick={signOut}
-            >
-              <Icon name="logout" size={20} />
-              <span>Logout</span>
-            </button>
-          </div>
-        </div>
-      </header>
+          </header>
+        }
+      >
+        <AdminHeader
+          activeSection={
+            location().pathname.startsWith('/admin/users')
+              ? 'users'
+              : location().pathname.startsWith('/books/')
+                ? 'books'
+                : undefined
+          }
+        />
+      </Show>
       <Outlet />
       <Show when={currentUser()?.role === 'member'}>
         <ReminderHost />
