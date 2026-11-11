@@ -14,8 +14,8 @@ import {
   getLoanStatusLabel,
 } from '../../api/loans';
 import { AdminHeader } from '../../components/AdminHeader';
-import { notify } from '../../components/Feedback';
 import { requestAdminConfirmation } from '../../components/admin-feedback-store';
+import { notify } from '../../components/Feedback';
 import Modal from '../../components/Modal';
 import './LoanManagementPage.css';
 

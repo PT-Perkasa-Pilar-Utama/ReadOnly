@@ -139,7 +139,7 @@ export function MasterBooksPage() {
           </div>
         </section>
 
-        <div class="master-books-toolbar" aria-label="Filter buku">
+        <fieldset class="master-books-toolbar" aria-label="Filter buku">
           <label class="master-books-search">
             <span>Cari Buku</span>
             <input
@@ -155,9 +155,7 @@ export function MasterBooksPage() {
             <span>Penulis</span>
             <select
               value={selectedAuthor()}
-              onChange={(event) =>
-                setSelectedAuthor(event.currentTarget.value)
-              }
+              onChange={(event) => setSelectedAuthor(event.currentTarget.value)}
               aria-label="Filter Penulis"
             >
               <option value="">Semua Penulis</option>
@@ -171,9 +169,7 @@ export function MasterBooksPage() {
             <span>Genre</span>
             <select
               value={selectedGenre()}
-              onChange={(event) =>
-                setSelectedGenre(event.currentTarget.value)
-              }
+              onChange={(event) => setSelectedGenre(event.currentTarget.value)}
               aria-label="Filter Genre"
             >
               <option value="">Semua Genre</option>
@@ -191,7 +187,7 @@ export function MasterBooksPage() {
           >
             Set Filter
           </button>
-        </div>
+        </fieldset>
 
         <Show when={genresQuery.isError}>
           <p class="master-books-inline-error" role="alert">
@@ -200,7 +196,6 @@ export function MasterBooksPage() {
         </Show>
 
         <section class="master-books-panel" aria-label="Daftar buku">
-
           <Show when={booksQuery.isPending}>
             <div class="master-books-state" aria-live="polite" aria-busy="true">
               <span class="master-books-loader" aria-hidden="true" />
@@ -324,7 +319,6 @@ export function MasterBooksPage() {
                 </tbody>
               </table>
             </div>
-
           </Show>
         </section>
 

@@ -20,8 +20,7 @@ export function LoanManagementPage() {
 
   const loansQuery = createQuery(() => ({
     queryKey: ['admin', 'loans', 'list', page()],
-    queryFn: ({ signal }) =>
-      getAdminLoans({ page: page(), limit: 10 }, signal),
+    queryFn: ({ signal }) => getAdminLoans({ page: page(), limit: 10 }, signal),
     refetchInterval: 60_000,
     refetchOnWindowFocus: true,
   }));
@@ -152,7 +151,6 @@ export function LoanManagementPage() {
                 </tbody>
               </table>
             </div>
-
           </Show>
         </section>
 

@@ -120,6 +120,10 @@
 }
 
 .master-books-toolbar {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
   display: grid;
   grid-template-columns: minmax(280px, 2.4fr) minmax(150px, 0.8fr) minmax(150px, 0.8fr) auto;
   align-items: end;

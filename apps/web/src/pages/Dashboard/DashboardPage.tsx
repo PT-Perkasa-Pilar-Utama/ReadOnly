@@ -180,7 +180,9 @@ export function DashboardPage() {
                 <div class="dashboard-chart-legend__copy">
                   <span>Pengembalian tepat waktu</span>
                   <small>
-                    {numberFormatter.format(summary().pieChart.onTime)} transaksi
+                    {numberFormatter.format(summary().pieChart.onTime)}
+                    {'·'}
+                    transaksi
                   </small>
                 </div>
 

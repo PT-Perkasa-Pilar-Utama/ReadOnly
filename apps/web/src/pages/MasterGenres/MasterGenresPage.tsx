@@ -10,8 +10,8 @@ import {
   updateAdminGenre,
 } from '../../api/genres';
 import { AdminHeader } from '../../components/AdminHeader';
-import { ErrorNotice, Loading, notify } from '../../components/Feedback';
 import { requestAdminConfirmation } from '../../components/admin-feedback-store';
+import { ErrorNotice, Loading, notify } from '../../components/Feedback';
 import Modal from '../../components/Modal';
 import Pagination from '../../components/Pagination';
 import { debounced } from '../../lib/debounced';
@@ -245,7 +245,7 @@ export default function MasterGenresPage() {
           </button>
         </section>
 
-        <div class="master-genres-toolbar" aria-label="Filter genre">
+        <fieldset class="master-genres-toolbar" aria-label="Filter genre">
           <label class="master-genres-search">
             <span>Nama Genre</span>
             <input
@@ -267,10 +267,9 @@ export default function MasterGenresPage() {
           >
             Set Filter
           </button>
-        </div>
+        </fieldset>
 
         <section class="master-genres-panel" aria-label="Daftar genre">
-
           <Show when={genresQuery.isPending}>
             <Loading label="Memuat daftar genre…" />
           </Show>
@@ -351,7 +350,13 @@ export default function MasterGenresPage() {
                                     title="Aktifkan"
                                   >
                                     <svg viewBox="0 0 20 20" aria-hidden="true">
-                                      <rect x="2.5" y="5.5" width="15" height="9" rx="4.5" />
+                                      <rect
+                                        x="2.5"
+                                        y="5.5"
+                                        width="15"
+                                        height="9"
+                                        rx="4.5"
+                                      />
                                       <circle cx="7.5" cy="10" r="2.5" />
                                     </svg>
                                   </button>
@@ -368,7 +373,13 @@ export default function MasterGenresPage() {
                                   title="Nonaktifkan"
                                 >
                                   <svg viewBox="0 0 20 20" aria-hidden="true">
-                                    <rect x="2.5" y="5.5" width="15" height="9" rx="4.5" />
+                                    <rect
+                                      x="2.5"
+                                      y="5.5"
+                                      width="15"
+                                      height="9"
+                                      rx="4.5"
+                                    />
                                     <circle cx="12.5" cy="10" r="2.5" />
                                   </svg>
                                 </button>
