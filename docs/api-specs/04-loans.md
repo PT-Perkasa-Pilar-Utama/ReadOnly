@@ -223,8 +223,8 @@ API mengirim kode status bahasa Inggris (`status`) sekaligus label UI bahasa Ind
 
 | AC | Operasi | Status |
 | --- | --- | --- |
-| AC-06.01 | GET /admin/loans | TODO |
-| AC-06.02 | GET /admin/loans/:id | TODO |
+| AC-06.01 | GET /admin/loans | OK |
+| AC-06.02 | GET /admin/loans/:id | OK |
 | AC-08.01 | POST /loans | TODO |
 | AC-08.02 | GET /loans/:id/qr | TODO |
 | AC-08.03 | POST /admin/loans/qr/preview, POST /admin/loans/qr/confirm | TODO |

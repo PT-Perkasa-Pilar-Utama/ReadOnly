@@ -74,8 +74,8 @@ Base: `/api/v1`
 | QR token | GET /loans/:id/qr | member | TODO |
 | Scan preview | POST /admin/loans/qr/preview | admin | TODO |
 | QR confirm | POST /admin/loans/qr/confirm | admin | TODO |
-| Daftar pinjaman Admin | GET /admin/loans | admin | TODO |
-| Detail peminjaman | GET /admin/loans/:id | admin | TODO |
+| Daftar pinjaman Admin | GET /admin/loans | admin | OK |
+| Detail peminjaman | GET /admin/loans/:id | admin | OK |
 | Fine payment | POST /admin/loans/:id/fine-payment | admin | TODO |
 | Ajukan pengembalian | POST /loans/:id/return | member | TODO |
 | Konfirmasi pengembalian | POST /admin/loans/:id/return-confirmation | admin | TODO |
