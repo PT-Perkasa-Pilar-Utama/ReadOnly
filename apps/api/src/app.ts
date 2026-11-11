@@ -69,6 +69,9 @@ export interface AppOptions {
   loginRateLimiter?: RateLimiter;
   loginRateLimitMax?: number;
   loginRateLimitWindowMs?: number;
+  qrRateLimiter?: RateLimiter;
+  qrRateLimitMax?: number;
+  qrRateLimitWindowMs?: number;
   bcryptSaltRounds?: number;
 }
 
@@ -184,6 +187,17 @@ function resolveLoginRateLimitMax(): number {
   return 5;
 }
 
+function resolveQrRateLimitMax(): number {
+  const raw = process.env.QR_RATE_LIMIT;
+  if (raw !== undefined && raw.trim().length > 0) {
+    const parsed = Number(raw);
+    if (Number.isInteger(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return 60;
+}
+
 function resolveRateLimitWindowMs(): number {
   const raw = process.env.QR_RATE_LIMIT_WINDOW_MIN;
   if (raw !== undefined && raw.trim().length > 0) {
@@ -250,6 +264,14 @@ export function createApp(options?: AppOptions) {
       windowMs: options?.loginRateLimitWindowMs ?? resolveRateLimitWindowMs(),
     });
 
+  const qrRateLimiter =
+    options?.qrRateLimiter ??
+    new InMemoryRateLimiter({
+      clock,
+      maxAttempts: options?.qrRateLimitMax ?? resolveQrRateLimitMax(),
+      windowMs: options?.qrRateLimitWindowMs ?? resolveRateLimitWindowMs(),
+    });
+
   const loansRepository =
     options?.loansRepository ??
     (options?.db
@@ -304,6 +326,6 @@ export function createApp(options?: AppOptions) {
     .use(createSystemRoutes(healthChecks))
     .use(createBooksRoutes(booksService, authService))
     .use(createAuthRoutes(authService, registerRateLimiter, loginRateLimiter))
-    .use(createLoansRoutes(loansService, authService))
+    .use(createLoansRoutes(loansService, authService, qrRateLimiter))
     .use(createJobsRoutes(jobsService, clock));
 }

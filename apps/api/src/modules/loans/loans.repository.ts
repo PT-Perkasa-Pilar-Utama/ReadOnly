@@ -18,14 +18,17 @@ import {
   type AdminLoansQuery,
   type FineStatus,
   formatIndonesianDate,
+  LOAN_STATUS_LABELS,
   type LoanStatus,
   type MyLoansQuery,
+  UUID_REGEX,
 } from '@readonly/shared';
 import {
   and,
   asc,
   desc,
   eq,
+  gt,
   ilike,
   inArray,
   isNull,
@@ -34,6 +37,10 @@ import {
   type SQL,
   sql,
 } from 'drizzle-orm';
+import {
+  createConflictError,
+  createInvalidTokenError,
+} from '../../shared/errors';
 
 export interface LoanBookRecord {
   id: string;
@@ -166,6 +173,36 @@ export function formatLoanDatePrefix(date: Date): string {
   return formatter.format(date).replace(/-/g, '');
 }
 
+export interface QrPreviewRecord {
+  loanId: string;
+  loanNo: string;
+  borrowerName: string;
+  requestedAt: Date;
+  book: {
+    id: string;
+    title: string;
+    author: string;
+    publisher: string;
+    publicationYear: number;
+    coverPath: string | null;
+    genres: string[];
+  };
+}
+
+export interface ConfirmPendingLoanParams {
+  loanId: string;
+  adminId: string;
+  now: Date;
+  dueDate: string;
+}
+
+export interface ConfirmPendingLoanResult {
+  loanId: string;
+  status: 'BORROWED';
+  statusLabel: string;
+  dueDate: string;
+}
+
 export interface LoansRepository {
   findBookById(bookId: string): Promise<LoanBookRecord | null>;
   generateLoanNo(date: Date): Promise<string>;
@@ -181,6 +218,10 @@ export interface LoansRepository {
   findLoanById(id: string): Promise<AdminLoanDetailRecord | null>;
   findOverdueCandidateLoans(todayWib: string): Promise<OverdueCandidateLoan[]>;
   transitionToOverdue(params: TransitionToOverdueInput): Promise<void>;
+  findPendingLoanByQrHash(qrTokenHash: string): Promise<QrPreviewRecord | null>;
+  confirmPendingLoan(
+    params: ConfirmPendingLoanParams,
+  ): Promise<ConfirmPendingLoanResult>;
 }
 
 export class DrizzleLoansRepository implements LoansRepository {
@@ -538,6 +579,139 @@ export class DrizzleLoansRepository implements LoansRepository {
         .onConflictDoNothing();
     });
   }
+
+  async findPendingLoanByQrHash(
+    qrTokenHash: string,
+  ): Promise<QrPreviewRecord | null> {
+    const [loanRow] = await this.db
+      .select({
+        loanId: loans.id,
+        loanNo: loans.loanNo,
+        requestedAt: loans.requestedAt,
+        borrowerName: users.fullName,
+        bookId: books.id,
+        bookTitle: books.title,
+        bookAuthor: books.author,
+        bookPublisher: books.publisher,
+        bookPublicationYear: books.publicationYear,
+        bookCoverPath: books.coverPath,
+      })
+      .from(loans)
+      .innerJoin(users, eq(loans.userId, users.id))
+      .innerJoin(books, eq(loans.bookId, books.id))
+      .where(
+        and(
+          eq(loans.qrTokenHash, qrTokenHash),
+          eq(loans.status, 'PENDING'),
+          isNull(loans.qrConsumedAt),
+        ),
+      );
+
+    if (!loanRow) {
+      return null;
+    }
+
+    const genreRows = await this.db
+      .select({ name: genres.name })
+      .from(bookGenres)
+      .innerJoin(genres, eq(bookGenres.genreId, genres.id))
+      .where(eq(bookGenres.bookId, loanRow.bookId))
+      .orderBy(asc(genres.name));
+
+    return {
+      loanId: loanRow.loanId,
+      loanNo: loanRow.loanNo,
+      borrowerName: loanRow.borrowerName,
+      requestedAt: loanRow.requestedAt,
+      book: {
+        id: loanRow.bookId,
+        title: loanRow.bookTitle,
+        author: loanRow.bookAuthor,
+        publisher: loanRow.bookPublisher,
+        publicationYear: loanRow.bookPublicationYear,
+        coverPath: loanRow.bookCoverPath,
+        genres: genreRows.map((g) => g.name),
+      },
+    };
+  }
+
+  async confirmPendingLoan(
+    params: ConfirmPendingLoanParams,
+  ): Promise<ConfirmPendingLoanResult> {
+    return await this.db.transaction(async (tx) => {
+      const [loanRow] = await tx
+        .select({
+          id: loans.id,
+          bookId: loans.bookId,
+        })
+        .from(loans)
+        .where(
+          and(
+            eq(loans.id, params.loanId),
+            eq(loans.status, 'PENDING'),
+            isNull(loans.qrConsumedAt),
+          ),
+        )
+        .for('update');
+
+      if (!loanRow) {
+        throw createInvalidTokenError('QR Code tidak valid');
+      }
+
+      const [updatedBook] = await tx
+        .update(books)
+        .set({ availableCount: sql`${books.availableCount} - 1` })
+        .where(and(eq(books.id, loanRow.bookId), gt(books.availableCount, 0)))
+        .returning({ id: books.id });
+
+      if (!updatedBook) {
+        throw createConflictError('Buku tidak tersedia (stok habis)');
+      }
+
+      const actorId =
+        params.adminId && UUID_REGEX.test(params.adminId)
+          ? params.adminId
+          : null;
+
+      const [updatedLoan] = await tx
+        .update(loans)
+        .set({
+          status: 'BORROWED',
+          confirmedAt: params.now,
+          confirmedBy: actorId,
+          dueDate: params.dueDate,
+          qrTokenHash: null,
+          qrConsumedAt: params.now,
+        })
+        .where(
+          and(
+            eq(loans.id, params.loanId),
+            eq(loans.status, 'PENDING'),
+            isNull(loans.qrConsumedAt),
+          ),
+        )
+        .returning({ id: loans.id });
+
+      if (!updatedLoan) {
+        throw createInvalidTokenError('QR Code tidak valid');
+      }
+
+      await tx.insert(loanEvents).values({
+        loanId: params.loanId,
+        fromStatus: 'PENDING',
+        toStatus: 'BORROWED',
+        actorId,
+        createdAt: params.now,
+      });
+
+      return {
+        loanId: params.loanId,
+        status: 'BORROWED',
+        statusLabel: LOAN_STATUS_LABELS.BORROWED,
+        dueDate: params.dueDate,
+      };
+    });
+  }
 }
 
 export interface InMemoryBook {
@@ -665,7 +839,7 @@ export class InMemoryLoansRepository implements LoansRepository {
       publisher: 'Kompas',
       publicationYear: 2018,
       synopsis: 'Buku C dengan keterlambatan 1 hari.',
-      availableCount: 1,
+      availableCount: 0,
       coverPath: null,
       deletedAt: null,
       genres: ['Bisnis'],
@@ -677,7 +851,7 @@ export class InMemoryLoansRepository implements LoansRepository {
       publisher: 'KPG',
       publicationYear: 2014,
       synopsis: 'Buku D dengan keterlambatan 4 hari.',
-      availableCount: 1,
+      availableCount: 0,
       coverPath: null,
       deletedAt: null,
       genres: ['Sejarah'],
@@ -689,7 +863,7 @@ export class InMemoryLoansRepository implements LoansRepository {
       publisher: 'OReilly',
       publicationYear: 2017,
       synopsis: 'Buku E dengan keterlambatan 5 hari.',
-      availableCount: 1,
+      availableCount: 0,
       coverPath: null,
       deletedAt: null,
       genres: ['Teknologi'],
@@ -701,7 +875,7 @@ export class InMemoryLoansRepository implements LoansRepository {
       publisher: 'Addison-Wesley',
       publicationYear: 2018,
       synopsis: 'Buku F dengan keterlambatan 6 hari.',
-      availableCount: 1,
+      availableCount: 0,
       coverPath: null,
       deletedAt: null,
       genres: ['Teknologi'],
@@ -725,7 +899,7 @@ export class InMemoryLoansRepository implements LoansRepository {
       publisher: 'KPG',
       publicationYear: 2017,
       synopsis: 'Buku H berstatus Pending Keterlambatan Belum Bayar.',
-      availableCount: 1,
+      availableCount: 0,
       coverPath: 'laut-bercerita.jpg',
       genres: ['Drama', 'Fiksi'],
     };
@@ -736,7 +910,7 @@ export class InMemoryLoansRepository implements LoansRepository {
       publisher: 'Gramedia',
       publicationYear: 2019,
       synopsis: 'Buku I berstatus Pending Keterlambatan Sudah Bayar.',
-      availableCount: 1,
+      availableCount: 0,
       coverPath: null,
       genres: ['Bisnis'],
     };
@@ -747,7 +921,7 @@ export class InMemoryLoansRepository implements LoansRepository {
       publisher: 'Gramedia',
       publicationYear: 2009,
       synopsis: 'Buku J sudah dikembalikan tepat waktu.',
-      availableCount: 1,
+      availableCount: 2,
       coverPath: null,
       genres: ['Fiksi'],
     };
@@ -764,8 +938,8 @@ export class InMemoryLoansRepository implements LoansRepository {
     };
     const bookEmpty: InMemoryBook = {
       id: QA_IDS.books.bookEmpty,
-      title: 'Out of Stock Book',
-      author: 'Empty Stock Author',
+      title: 'Book-Empty: Out of Stock Book',
+      author: 'No Author',
       publisher: 'Prentice Hall',
       publicationYear: 2020,
       synopsis: 'Buku dengan stok 0 untuk pengujian ketersediaan.',
@@ -1305,5 +1479,98 @@ export class InMemoryLoansRepository implements LoansRepository {
       return this.notifications.filter((n) => n.loanId === loanId);
     }
     return this.notifications;
+  }
+
+  async findPendingLoanByQrHash(
+    qrTokenHash: string,
+  ): Promise<QrPreviewRecord | null> {
+    const loan = this.loans.find(
+      (item) =>
+        item.qrTokenHash === qrTokenHash &&
+        item.status === 'PENDING' &&
+        item.qrConsumedAt === null,
+    );
+    if (!loan) {
+      return null;
+    }
+
+    const user = this.users.get(loan.userId);
+    const book = this.books.get(loan.bookId);
+    if (!user || !book) {
+      return null;
+    }
+
+    return {
+      loanId: loan.id,
+      loanNo: loan.loanNo,
+      borrowerName: user.fullName,
+      requestedAt: loan.requestedAt,
+      book: {
+        id: book.id,
+        title: book.title,
+        author: book.author,
+        publisher: book.publisher ?? '',
+        publicationYear: book.publicationYear ?? 0,
+        coverPath: book.coverPath,
+        genres: [...(book.genres ?? [])],
+      },
+    };
+  }
+
+  async confirmPendingLoan(
+    params: ConfirmPendingLoanParams,
+  ): Promise<ConfirmPendingLoanResult> {
+    const loan = this.loans.find(
+      (item) =>
+        item.id === params.loanId &&
+        item.status === 'PENDING' &&
+        item.qrConsumedAt === null,
+    );
+    if (!loan) {
+      throw createInvalidTokenError('QR Code tidak valid');
+    }
+
+    const book = this.books.get(loan.bookId);
+    if (!book || book.availableCount <= 0) {
+      throw createConflictError('Buku tidak tersedia (stok habis)');
+    }
+
+    book.availableCount -= 1;
+
+    loan.status = 'BORROWED';
+    loan.confirmedAt = params.now;
+    loan.dueDate = params.dueDate;
+    loan.qrTokenHash = null;
+    loan.qrConsumedAt = params.now;
+
+    const actorId =
+      params.adminId && UUID_REGEX.test(params.adminId) ? params.adminId : null;
+
+    this.loanEvents.push({
+      id: crypto.randomUUID(),
+      loanId: params.loanId,
+      fromStatus: 'PENDING',
+      toStatus: 'BORROWED',
+      actorId,
+      createdAt: params.now,
+    });
+
+    return {
+      loanId: params.loanId,
+      status: 'BORROWED',
+      statusLabel: LOAN_STATUS_LABELS.BORROWED,
+      dueDate: params.dueDate,
+    };
+  }
+
+  setBookAvailableCount(bookId: string, count: number): void {
+    const book = this.books.get(bookId);
+    if (book) {
+      book.availableCount = count;
+    }
+  }
+
+  getBook(bookId: string): InMemoryBook | undefined {
+    return this.books.get(bookId);
   }
 }

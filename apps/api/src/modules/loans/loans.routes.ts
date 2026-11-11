@@ -1,18 +1,26 @@
 import { UUID_REGEX } from '@readonly/shared';
 import { Elysia } from 'elysia';
-import { createNotFoundError, fromZodError } from '../../shared/errors';
+import {
+  createInvalidTokenError,
+  createNotFoundError,
+  createRateLimitError,
+  fromZodError,
+} from '../../shared/errors';
+import { extractClientIp, type RateLimiter } from '../../shared/rate-limit';
 import { requireRole } from '../auth/auth.routes';
 import type { AuthService } from '../auth/auth.service';
 import {
   adminLoansQuerySchema,
   createLoanInputSchema,
   myLoansQuerySchema,
+  qrTokenInputSchema,
 } from './loans.schema';
 import type { LoansService } from './loans.service';
 
 export function createLoansRoutes(
   loansService: LoansService,
   authService?: AuthService,
+  qrRateLimiter?: RateLimiter,
 ) {
   return new Elysia()
     .post('/loans', async ({ body, request, set }) => {
@@ -86,5 +94,38 @@ export function createLoansRoutes(
       }
 
       return loansService.getAdminLoanDetail(id);
+    })
+    .post('/admin/loans/qr/preview', async ({ body, request }) => {
+      if (authService) {
+        await requireRole(request, authService, 'admin');
+      }
+
+      if (qrRateLimiter) {
+        const clientIp = extractClientIp(request);
+        if (!qrRateLimiter.consume(`qr-preview:${clientIp}`)) {
+          throw createRateLimitError();
+        }
+      }
+
+      const parsed = qrTokenInputSchema.safeParse(body);
+      if (!parsed.success) {
+        throw createInvalidTokenError('QR Code tidak valid');
+      }
+
+      return loansService.previewQrLoan(parsed.data.qr_token);
+    })
+    .post('/admin/loans/qr/confirm', async ({ body, request }) => {
+      let adminId = '';
+      if (authService) {
+        const session = await requireRole(request, authService, 'admin');
+        adminId = session.user.id;
+      }
+
+      const parsed = qrTokenInputSchema.safeParse(body);
+      if (!parsed.success) {
+        throw createInvalidTokenError('QR Code tidak valid');
+      }
+
+      return loansService.confirmQrLoan(parsed.data.qr_token, adminId);
     });
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import {
+  calculateDueDateWib,
   calculateNextWibRunDelayMs,
   formatIndonesianDate,
   getWibDate,
@@ -41,6 +42,21 @@ describe('shared dates utilities (WIB)', () => {
 
     expect(isSameWibDay(earlyMorningWib, lateNightWib)).toBe(true);
     expect(isSameWibDay(lateNightWib, nextDayWib)).toBe(false);
+  });
+
+  it('calculates due date in WIB correctly based on confirmation timestamp', () => {
+    // 2026-11-01 10:00 WIB (03:00 UTC) + 7 days -> 2026-11-08
+    const confirmed1 = new Date('2026-11-01T03:00:00.000Z');
+    expect(calculateDueDateWib(confirmed1, 7)).toBe('2026-11-08');
+
+    // 2026-11-09 10:00 WIB (03:00 UTC) + 7 days -> 2026-11-16
+    const confirmed2 = new Date('2026-11-09T03:00:00.000Z');
+    expect(calculateDueDateWib(confirmed2, 7)).toBe('2026-11-16');
+
+    // Late night UTC that crosses to next WIB calendar day:
+    // 2026-11-09 23:00:00 UTC = 2026-11-10 06:00:00 WIB -> + 7 days = 2026-11-17
+    const confirmed3 = new Date('2026-11-09T23:00:00.000Z');
+    expect(calculateDueDateWib(confirmed3, 7)).toBe('2026-11-17');
   });
 
   it('calculates next 00:05 WIB delay accurately', () => {

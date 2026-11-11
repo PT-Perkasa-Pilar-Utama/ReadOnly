@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'bun:test';
-import { type Database, QA_IDS, sha256Hex } from '@readonly/db';
+import {
+  type Database,
+  QA_IDS,
+  QA_PENDING_QR_TOKEN,
+  sha256Hex,
+} from '@readonly/db';
 import type {
   AdminLoanDetailResponse,
   AdminLoansResponse,
   ApiErrorEnvelope,
+  QrConfirmResponse,
+  QrPreviewResponse,
 } from '@readonly/shared';
 import { createApp } from '../../app';
 import type { ClockPort } from '../../ports/clock';
@@ -804,6 +811,616 @@ describe('loans module - DrizzleLoansRepository', () => {
     expect(updateCalled).toBe(true);
     expect(eventInserted).toBe(true);
     expect(notifInserted).toBe(true);
+  });
+
+  it('DrizzleLoansRepository findPendingLoanByQrHash returns null when not found', async () => {
+    const fakeDb = {
+      select: () => ({
+        from: () => ({
+          innerJoin: () => ({
+            innerJoin: () => ({
+              where: async () => [],
+            }),
+          }),
+        }),
+      }),
+    } as unknown as Database;
+
+    const repo = new DrizzleLoansRepository(fakeDb);
+    const result = await repo.findPendingLoanByQrHash('dummy-hash');
+    expect(result).toBeNull();
+  });
+
+  it('DrizzleLoansRepository findPendingLoanByQrHash returns loan details when found', async () => {
+    let callCount = 0;
+    const makeJoinObj = () => ({
+      innerJoin: () => makeJoinObj(),
+      where: () => {
+        callCount += 1;
+        if (callCount === 1) {
+          return Promise.resolve([
+            {
+              loanId: '00000000-0000-4000-8003-000000000001',
+              loanNo: 'PJM-20261109-0001',
+              requestedAt: new Date('2026-11-09T03:00:00.000Z'),
+              borrowerName: 'Member Satu',
+              bookId: '00000000-0000-4000-8002-000000000001',
+              bookTitle: 'Clean Code',
+              bookAuthor: 'Robert C. Martin',
+              bookPublisher: 'Prentice Hall',
+              bookPublicationYear: 2008,
+              bookCoverPath: 'clean-code.jpg',
+            },
+          ]);
+        }
+        return {
+          orderBy: async () => [{ name: 'Teknologi' }],
+        };
+      },
+    });
+
+    const fakeDb = {
+      select: () => ({
+        from: () => ({
+          innerJoin: () => makeJoinObj(),
+        }),
+      }),
+    } as unknown as Database;
+
+    const repo = new DrizzleLoansRepository(fakeDb);
+    const result = await repo.findPendingLoanByQrHash('sample-hash');
+    expect(result).not.toBeNull();
+    expect(result?.loanId).toBe('00000000-0000-4000-8003-000000000001');
+    expect(result?.borrowerName).toBe('Member Satu');
+    expect(result?.book.genres).toEqual(['Teknologi']);
+  });
+
+  it('DrizzleLoansRepository confirmPendingLoan handles success and error paths', async () => {
+    // 1. Throws invalid_token when loan is not found or not pending
+    const fakeDbNotFound = {
+      transaction: async (fn: (tx: unknown) => unknown) => {
+        const fakeTx = {
+          select: () => ({
+            from: () => ({
+              where: () => ({
+                for: async () => [],
+              }),
+            }),
+          }),
+        };
+        return await fn(fakeTx);
+      },
+    } as unknown as Database;
+
+    const repoNotFound = new DrizzleLoansRepository(fakeDbNotFound);
+    expect(
+      repoNotFound.confirmPendingLoan({
+        loanId: '00000000-0000-4000-8003-000000000001',
+        adminId: '00000000-0000-4000-8001-000000000001',
+        now: new Date(),
+        dueDate: '2026-11-16',
+      }),
+    ).rejects.toThrow('QR Code tidak valid');
+
+    // 2. Throws conflict when book conditional decrement returns 0 rows (stock 0)
+    const fakeDbStockZero = {
+      transaction: async (fn: (tx: unknown) => unknown) => {
+        const fakeTx = {
+          select: () => ({
+            from: () => ({
+              where: () => ({
+                for: async () => [
+                  {
+                    id: '00000000-0000-4000-8003-000000000001',
+                    bookId: '00000000-0000-4000-8002-000000000001',
+                  },
+                ],
+              }),
+            }),
+          }),
+          update: () => ({
+            set: () => ({
+              where: () => ({
+                returning: async () => [],
+              }),
+            }),
+          }),
+        };
+        return await fn(fakeTx);
+      },
+    } as unknown as Database;
+
+    const repoStockZero = new DrizzleLoansRepository(fakeDbStockZero);
+    expect(
+      repoStockZero.confirmPendingLoan({
+        loanId: '00000000-0000-4000-8003-000000000001',
+        adminId: '00000000-0000-4000-8001-000000000001',
+        now: new Date(),
+        dueDate: '2026-11-16',
+      }),
+    ).rejects.toThrow('Buku tidak tersedia (stok habis)');
+
+    // 3. Success path
+    let loanUpdated = false;
+    let eventInserted = false;
+    const fakeDbSuccess = {
+      transaction: async (fn: (tx: unknown) => unknown) => {
+        const fakeTx = {
+          select: () => ({
+            from: () => ({
+              where: () => ({
+                for: async () => [
+                  {
+                    id: '00000000-0000-4000-8003-000000000001',
+                    bookId: '00000000-0000-4000-8002-000000000001',
+                  },
+                ],
+              }),
+            }),
+          }),
+          update: () => ({
+            set: () => ({
+              where: () => ({
+                returning: async () => {
+                  loanUpdated = true;
+                  return [{ id: '00000000-0000-4000-8003-000000000001' }];
+                },
+              }),
+            }),
+          }),
+          insert: () => ({
+            values: async () => {
+              eventInserted = true;
+            },
+          }),
+        };
+        return await fn(fakeTx);
+      },
+    } as unknown as Database;
+
+    const repoSuccess = new DrizzleLoansRepository(fakeDbSuccess);
+    const result = await repoSuccess.confirmPendingLoan({
+      loanId: '00000000-0000-4000-8003-000000000001',
+      adminId: '00000000-0000-4000-8001-000000000001',
+      now: new Date(),
+      dueDate: '2026-11-16',
+    });
+
+    expect(result.status).toBe('BORROWED');
+    expect(result.dueDate).toBe('2026-11-16');
+    expect(loanUpdated).toBe(true);
+    expect(eventInserted).toBe(true);
+  });
+});
+
+describe('loans module - QR preview & confirm RBAC & Rate Limiting (BE-S2-03 / SEC-02, SEC-05, SEC-06)', () => {
+  it('POST /admin/loans/qr/preview returns 401 when unauthenticated and 403 for member', async () => {
+    const { app, getMemberHeaders } = createTestHarness();
+
+    const resUnauth = await app.handle(
+      new Request('http://localhost/api/v1/admin/loans/qr/preview', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ qr_token: QA_PENDING_QR_TOKEN }),
+      }),
+    );
+    expect(resUnauth.status).toBe(401);
+
+    const memberHeaders = await getMemberHeaders();
+    const resMember = await app.handle(
+      new Request('http://localhost/api/v1/admin/loans/qr/preview', {
+        method: 'POST',
+        headers: {
+          ...memberHeaders,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ qr_token: QA_PENDING_QR_TOKEN }),
+      }),
+    );
+    expect(resMember.status).toBe(403);
+  });
+
+  it('POST /admin/loans/qr/confirm returns 401 when unauthenticated and 403 for member', async () => {
+    const { app, getMemberHeaders } = createTestHarness();
+
+    const resUnauth = await app.handle(
+      new Request('http://localhost/api/v1/admin/loans/qr/confirm', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ qr_token: QA_PENDING_QR_TOKEN }),
+      }),
+    );
+    expect(resUnauth.status).toBe(401);
+
+    const memberHeaders = await getMemberHeaders();
+    const resMember = await app.handle(
+      new Request('http://localhost/api/v1/admin/loans/qr/confirm', {
+        method: 'POST',
+        headers: {
+          ...memberHeaders,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ qr_token: QA_PENDING_QR_TOKEN }),
+      }),
+    );
+    expect(resMember.status).toBe(403);
+  });
+
+  it('POST /admin/loans/qr/preview enforces rate limit per IP (SEC-06)', async () => {
+    const loansRepository = new InMemoryLoansRepository();
+    const storagePort = new MemoryStorageAdapter();
+    const loansService = new LoansService({
+      repository: loansRepository,
+      storage: storagePort,
+    });
+    const app = createApp({
+      loansRepository,
+      loansService,
+      storagePort,
+      qrRateLimitMax: 2,
+      bcryptSaltRounds: 4,
+    });
+
+    const loginRes = await app.handle(
+      new Request('http://localhost/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          email: 'admin@readonly.ppu.co.id',
+          password: 'password123',
+        }),
+      }),
+    );
+    const loginBody = (await loginRes.json()) as { data: { token: string } };
+    const adminHeaders = {
+      cookie: `readonly_session=${loginBody.data.token}`,
+      'content-type': 'application/json',
+      'x-forwarded-for': '192.168.1.100',
+    };
+
+    const res1 = await app.handle(
+      new Request('http://localhost/api/v1/admin/loans/qr/preview', {
+        method: 'POST',
+        headers: adminHeaders,
+        body: JSON.stringify({ qr_token: QA_PENDING_QR_TOKEN }),
+      }),
+    );
+    expect(res1.status).toBe(200);
+
+    const res2 = await app.handle(
+      new Request('http://localhost/api/v1/admin/loans/qr/preview', {
+        method: 'POST',
+        headers: adminHeaders,
+        body: JSON.stringify({ qr_token: QA_PENDING_QR_TOKEN }),
+      }),
+    );
+    expect(res2.status).toBe(200);
+
+    const res3 = await app.handle(
+      new Request('http://localhost/api/v1/admin/loans/qr/preview', {
+        method: 'POST',
+        headers: adminHeaders,
+        body: JSON.stringify({ qr_token: QA_PENDING_QR_TOKEN }),
+      }),
+    );
+    expect(res3.status).toBe(429);
+    const body3 = (await res3.json()) as ApiErrorEnvelope;
+    expect(body3.code).toBe('rate_limit_exceeded');
+  });
+});
+
+describe('loans module - POST /admin/loans/qr/preview (BE-S2-03 / AC-08.03, AC-08.06)', () => {
+  it('previews pending loan with valid QR token without mutating state or stock', async () => {
+    const { app, loansRepository, getAdminHeaders } = createTestHarness();
+    const adminHeaders = await getAdminHeaders();
+
+    const bookBefore = loansRepository.getBook(QA_IDS.books.bookB);
+    const stockBefore = bookBefore?.availableCount ?? 0;
+
+    const res = await app.handle(
+      new Request('http://localhost/api/v1/admin/loans/qr/preview', {
+        method: 'POST',
+        headers: {
+          ...adminHeaders,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ qr_token: QA_PENDING_QR_TOKEN }),
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as QrPreviewResponse;
+    expect(body.data.loan_id).toBe(QA_IDS.loans.pending);
+    expect(body.data.loan_no).toBe('PJM-20261109-0001');
+    expect(body.data.borrower_name).toBe('Member Satu');
+    expect(body.data.loan_duration_days).toBe(7);
+    expect(body.data.book.id).toBe(QA_IDS.books.bookB);
+    expect(body.data.book.title).toBe('Book-B: Clean Architecture');
+    expect(body.data.book.author).toBe('Robert C. Martin');
+    expect(body.data.book.publisher).toBe('Prentice Hall');
+    expect(body.data.book.publication_year).toBe(2017);
+    expect(Array.isArray(body.data.book.genres)).toBe(true);
+
+    const bookAfter = loansRepository.getBook(QA_IDS.books.bookB);
+    expect(bookAfter?.availableCount).toBe(stockBefore);
+    const pendingLoan = loansRepository
+      .getLoans()
+      .find((l) => l.id === QA_IDS.loans.pending);
+    expect(pendingLoan?.status).toBe('PENDING');
+    expect(pendingLoan?.qrConsumedAt).toBeNull();
+  });
+
+  it('rejects invalid or unknown QR token with 422 verbatim AC-08.06 message', async () => {
+    const { app, getAdminHeaders } = createTestHarness();
+    const adminHeaders = await getAdminHeaders();
+
+    const res = await app.handle(
+      new Request('http://localhost/api/v1/admin/loans/qr/preview', {
+        method: 'POST',
+        headers: {
+          ...adminHeaders,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ qr_token: 'non-existent-token' }),
+      }),
+    );
+
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as ApiErrorEnvelope;
+    expect(body.code).toBe('invalid_token');
+    expect(body.message).toBe('QR Code tidak valid');
+  });
+
+  it('rejects already-consumed QR token with 422 verbatim AC-08.06 message', async () => {
+    const { app, loansRepository, getAdminHeaders } = createTestHarness();
+    const adminHeaders = await getAdminHeaders();
+
+    const pendingLoan = loansRepository
+      .getLoans()
+      .find((l) => l.id === QA_IDS.loans.pending);
+    if (pendingLoan) {
+      pendingLoan.qrConsumedAt = new Date();
+    }
+
+    const res = await app.handle(
+      new Request('http://localhost/api/v1/admin/loans/qr/preview', {
+        method: 'POST',
+        headers: {
+          ...adminHeaders,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ qr_token: QA_PENDING_QR_TOKEN }),
+      }),
+    );
+
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as ApiErrorEnvelope;
+    expect(body.code).toBe('invalid_token');
+    expect(body.message).toBe('QR Code tidak valid');
+  });
+
+  it('rejects QR token when loan status is not PENDING with 422 verbatim AC-08.06 message', async () => {
+    const { app, loansRepository, getAdminHeaders } = createTestHarness();
+    const adminHeaders = await getAdminHeaders();
+
+    const pendingLoan = loansRepository
+      .getLoans()
+      .find((l) => l.id === QA_IDS.loans.pending);
+    if (pendingLoan) {
+      pendingLoan.status = 'BORROWED';
+    }
+
+    const res = await app.handle(
+      new Request('http://localhost/api/v1/admin/loans/qr/preview', {
+        method: 'POST',
+        headers: {
+          ...adminHeaders,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ qr_token: QA_PENDING_QR_TOKEN }),
+      }),
+    );
+
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as ApiErrorEnvelope;
+    expect(body.code).toBe('invalid_token');
+    expect(body.message).toBe('QR Code tidak valid');
+  });
+
+  it('rejects empty or malformed request body with 422 verbatim AC-08.06 message', async () => {
+    const { app, getAdminHeaders } = createTestHarness();
+    const adminHeaders = await getAdminHeaders();
+
+    const resEmpty = await app.handle(
+      new Request('http://localhost/api/v1/admin/loans/qr/preview', {
+        method: 'POST',
+        headers: {
+          ...adminHeaders,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ qr_token: '' }),
+      }),
+    );
+    expect(resEmpty.status).toBe(422);
+    const bodyEmpty = (await resEmpty.json()) as ApiErrorEnvelope;
+    expect(bodyEmpty.code).toBe('invalid_token');
+    expect(bodyEmpty.message).toBe('QR Code tidak valid');
+
+    const resNoBody = await app.handle(
+      new Request('http://localhost/api/v1/admin/loans/qr/preview', {
+        method: 'POST',
+        headers: {
+          ...adminHeaders,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({}),
+      }),
+    );
+    expect(resNoBody.status).toBe(422);
+    const bodyNoBody = (await resNoBody.json()) as ApiErrorEnvelope;
+    expect(bodyNoBody.code).toBe('invalid_token');
+  });
+});
+
+describe('loans module - POST /admin/loans/qr/confirm (BE-S2-03 / AC-08.03, AC-08.06, Q-15)', () => {
+  it('confirms loan, transitions to BORROWED, decrements stock atomically, and logs event', async () => {
+    const { app, loansRepository, getAdminHeaders } = createTestHarness();
+    const adminHeaders = await getAdminHeaders();
+
+    const bookBefore = loansRepository.getBook(QA_IDS.books.bookB);
+    const stockBefore = bookBefore?.availableCount ?? 2;
+
+    const res = await app.handle(
+      new Request('http://localhost/api/v1/admin/loans/qr/confirm', {
+        method: 'POST',
+        headers: {
+          ...adminHeaders,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ qr_token: QA_PENDING_QR_TOKEN }),
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as QrConfirmResponse;
+    expect(body.data.loan_id).toBe(QA_IDS.loans.pending);
+    expect(body.data.status).toBe('BORROWED');
+    expect(body.data.status_label).toBe('Sedang Dipinjam');
+    expect(typeof body.data.due_date).toBe('string');
+    expect(body.message).toBe('Buku berhasil Dipinjam');
+
+    const bookAfter = loansRepository.getBook(QA_IDS.books.bookB);
+    expect(bookAfter?.availableCount).toBe(stockBefore - 1);
+
+    const updatedLoan = loansRepository
+      .getLoans()
+      .find((l) => l.id === QA_IDS.loans.pending);
+    expect(updatedLoan?.status).toBe('BORROWED');
+    expect(updatedLoan?.qrTokenHash).toBeNull();
+    expect(updatedLoan?.qrConsumedAt).toBeInstanceOf(Date);
+    expect(updatedLoan?.confirmedAt).toBeInstanceOf(Date);
+
+    const events = loansRepository.getLoanEvents(QA_IDS.loans.pending);
+    expect(events.length).toBeGreaterThan(0);
+    const confirmEvent = events.find(
+      (e) => e.fromStatus === 'PENDING' && e.toStatus === 'BORROWED',
+    );
+    expect(confirmEvent).toBeDefined();
+    expect(confirmEvent?.actorId).toBe(QA_IDS.users.admin);
+  });
+
+  it('enforces single-use token: repeated confirm returns 422 AC-08.06', async () => {
+    const { app, getAdminHeaders } = createTestHarness();
+    const adminHeaders = await getAdminHeaders();
+
+    const res1 = await app.handle(
+      new Request('http://localhost/api/v1/admin/loans/qr/confirm', {
+        method: 'POST',
+        headers: {
+          ...adminHeaders,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ qr_token: QA_PENDING_QR_TOKEN }),
+      }),
+    );
+    expect(res1.status).toBe(200);
+
+    const res2 = await app.handle(
+      new Request('http://localhost/api/v1/admin/loans/qr/confirm', {
+        method: 'POST',
+        headers: {
+          ...adminHeaders,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ qr_token: QA_PENDING_QR_TOKEN }),
+      }),
+    );
+    expect(res2.status).toBe(422);
+    const body2 = (await res2.json()) as ApiErrorEnvelope;
+    expect(body2.code).toBe('invalid_token');
+    expect(body2.message).toBe('QR Code tidak valid');
+
+    const resPreview = await app.handle(
+      new Request('http://localhost/api/v1/admin/loans/qr/preview', {
+        method: 'POST',
+        headers: {
+          ...adminHeaders,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ qr_token: QA_PENDING_QR_TOKEN }),
+      }),
+    );
+    expect(resPreview.status).toBe(422);
+  });
+
+  it('returns 409 conflict when book stock is exhausted (Q-15)', async () => {
+    const { app, loansRepository, getAdminHeaders } = createTestHarness();
+    const adminHeaders = await getAdminHeaders();
+
+    loansRepository.setBookAvailableCount(QA_IDS.books.bookB, 0);
+
+    const res = await app.handle(
+      new Request('http://localhost/api/v1/admin/loans/qr/confirm', {
+        method: 'POST',
+        headers: {
+          ...adminHeaders,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ qr_token: QA_PENDING_QR_TOKEN }),
+      }),
+    );
+
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as ApiErrorEnvelope;
+    expect(body.code).toBe('conflict');
+    expect(body.message).toBe('Buku tidak tersedia (stok habis)');
+
+    const loan = loansRepository
+      .getLoans()
+      .find((l) => l.id === QA_IDS.loans.pending);
+    expect(loan?.status).toBe('PENDING');
+    expect(loan?.qrConsumedAt).toBeNull();
+  });
+
+  it('rejects unknown or invalid QR token on confirm with 422 AC-08.06', async () => {
+    const { app, getAdminHeaders } = createTestHarness();
+    const adminHeaders = await getAdminHeaders();
+
+    const res = await app.handle(
+      new Request('http://localhost/api/v1/admin/loans/qr/confirm', {
+        method: 'POST',
+        headers: {
+          ...adminHeaders,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ qr_token: 'fake-unknown-token' }),
+      }),
+    );
+
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as ApiErrorEnvelope;
+    expect(body.code).toBe('invalid_token');
+    expect(body.message).toBe('QR Code tidak valid');
+  });
+
+  it('rejects empty or missing token on confirm with 422 AC-08.06', async () => {
+    const { app, getAdminHeaders } = createTestHarness();
+    const adminHeaders = await getAdminHeaders();
+
+    const res = await app.handle(
+      new Request('http://localhost/api/v1/admin/loans/qr/confirm', {
+        method: 'POST',
+        headers: {
+          ...adminHeaders,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ qr_token: '' }),
+      }),
+    );
+
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as ApiErrorEnvelope;
+    expect(body.code).toBe('invalid_token');
   });
 });
 

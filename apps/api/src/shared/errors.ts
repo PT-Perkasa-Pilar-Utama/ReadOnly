@@ -117,6 +117,17 @@ export function createInvalidStateTransitionError(
   });
 }
 
+export function createInvalidTokenError(
+  message = 'QR Code tidak valid',
+): AppError {
+  return new AppError({
+    statusCode: 422,
+    error: 'Unprocessable Entity',
+    code: 'invalid_token',
+    message,
+  });
+}
+
 export function createGenreInUseError(
   message: string = API_MESSAGES.GENRE_IN_USE,
 ): AppError {

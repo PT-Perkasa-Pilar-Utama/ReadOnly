@@ -217,3 +217,58 @@ export const adminLoanDetailResponseSchema = z.object({
 export type AdminLoanDetailResponse = z.infer<
   typeof adminLoanDetailResponseSchema
 >;
+
+export const QR_CONFIRM_SUCCESS_MESSAGE = 'Buku berhasil Dipinjam';
+export const QR_INVALID_TOKEN_MESSAGE = 'QR Code tidak valid';
+export const BOOK_OUT_OF_STOCK_MESSAGE = 'Buku tidak tersedia (stok habis)';
+
+export const qrTokenInputSchema = z.object({
+  qr_token: z.string().trim().min(1, { message: QR_INVALID_TOKEN_MESSAGE }),
+});
+
+export type QrTokenInput = z.infer<typeof qrTokenInputSchema>;
+
+export const qrPreviewBookSchema = z.object({
+  id: z.string().regex(UUID_REGEX),
+  title: z.string(),
+  author: z.string(),
+  publisher: z.string(),
+  publication_year: z.number().int(),
+  cover_url: z.string(),
+  genres: z.array(z.string()),
+});
+
+export type QrPreviewBook = z.infer<typeof qrPreviewBookSchema>;
+
+export const qrPreviewDataSchema = z.object({
+  loan_id: z.string().regex(UUID_REGEX),
+  loan_no: z.string(),
+  borrower_name: z.string(),
+  requested_at: z.string(),
+  loan_duration_days: z.number().int(),
+  book: qrPreviewBookSchema,
+});
+
+export type QrPreviewData = z.infer<typeof qrPreviewDataSchema>;
+
+export const qrPreviewResponseSchema = z.object({
+  data: qrPreviewDataSchema,
+});
+
+export type QrPreviewResponse = z.infer<typeof qrPreviewResponseSchema>;
+
+export const qrConfirmDataSchema = z.object({
+  loan_id: z.string().regex(UUID_REGEX),
+  status: z.literal('BORROWED'),
+  status_label: z.literal('Sedang Dipinjam'),
+  due_date: z.string(),
+});
+
+export type QrConfirmData = z.infer<typeof qrConfirmDataSchema>;
+
+export const qrConfirmResponseSchema = z.object({
+  data: qrConfirmDataSchema,
+  message: z.string(),
+});
+
+export type QrConfirmResponse = z.infer<typeof qrConfirmResponseSchema>;

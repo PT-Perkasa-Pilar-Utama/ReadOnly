@@ -12,6 +12,9 @@ import {
   MEMBER_ACTIONS,
   myLoanItemSchema,
   myLoansQuerySchema,
+  qrConfirmResponseSchema,
+  qrPreviewResponseSchema,
+  qrTokenInputSchema,
   STATUS_MEMBER_ACTION_MAP,
 } from './loans';
 
@@ -193,5 +196,56 @@ describe('shared loans schemas & contracts (BE-S2-02 & BE-S3-01)', () => {
       can_confirm_return: false,
     });
     expect(valid.success).toBe(true);
+  });
+
+  it('validates qrTokenInputSchema and rejects empty tokens with verbatim AC-08.06 message', () => {
+    expect(qrTokenInputSchema.parse({ qr_token: 'valid-token-123' })).toEqual({
+      qr_token: 'valid-token-123',
+    });
+
+    expect(() => qrTokenInputSchema.parse({ qr_token: '' })).toThrow(
+      'QR Code tidak valid',
+    );
+    expect(() => qrTokenInputSchema.parse({ qr_token: '   ' })).toThrow(
+      'QR Code tidak valid',
+    );
+    expect(() => qrTokenInputSchema.parse({})).toThrow();
+  });
+
+  it('validates qrPreviewResponseSchema', () => {
+    const validPreview = {
+      data: {
+        loan_id: '00000000-0000-4000-8003-000000000001',
+        loan_no: 'PJM-20261109-0001',
+        borrower_name: 'Member Satu',
+        requested_at: '2026-11-09T03:00:00.000Z',
+        loan_duration_days: 7,
+        book: {
+          id: '00000000-0000-4000-8002-000000000001',
+          title: 'Clean Code',
+          author: 'Robert C. Martin',
+          publisher: 'Prentice Hall',
+          publication_year: 2008,
+          cover_url: '/api/v1/covers/clean-code.jpg',
+          genres: ['Teknologi'],
+        },
+      },
+    };
+
+    expect(qrPreviewResponseSchema.parse(validPreview)).toEqual(validPreview);
+  });
+
+  it('validates qrConfirmResponseSchema', () => {
+    const validConfirm = {
+      data: {
+        loan_id: '00000000-0000-4000-8003-000000000001',
+        status: 'BORROWED' as const,
+        status_label: 'Sedang Dipinjam' as const,
+        due_date: '2026-11-16',
+      },
+      message: 'Buku berhasil Dipinjam',
+    };
+
+    expect(qrConfirmResponseSchema.parse(validConfirm)).toEqual(validConfirm);
   });
 });
