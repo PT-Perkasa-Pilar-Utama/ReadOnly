@@ -85,4 +85,3 @@ describe('shared books schemas (BE-S2-01 / US-07)', () => {
     expect(parsed.success).toBe(false);
   });
 });
-
