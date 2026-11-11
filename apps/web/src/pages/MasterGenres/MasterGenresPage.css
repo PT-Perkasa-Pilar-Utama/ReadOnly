@@ -205,7 +205,7 @@
 .master-genres-actions {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: center;
   gap: 12px;
 }
 
@@ -242,16 +242,57 @@
 
 .master-genres-table th:last-child,
 .master-genres-table td:last-child {
-  text-align: right;
+  text-align: center;
 }
 
-.master-genres-app .pagination {
-  border-radius: 12px;
+.master-genres-table-footer {
+  display: flex;
+  min-height: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 18px;
+  padding: 0;
 }
 
-.master-genres-app .pagination button {
+.master-genres-table-footer p {
+  margin: 0;
+  color: #8b817c;
+  font-size: 12px;
+}
+
+.master-genres-pagination {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #706662;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.master-genres-pagination button {
+  display: grid;
+  width: 44px;
   height: 42px;
+  place-items: center;
+  border: 1px solid #e7ded7;
   border-radius: 12px;
+  background: #fff;
+  color: #702d40;
+  cursor: pointer;
+  font-size: 17px;
+}
+
+.master-genres-pagination button:disabled {
+  color: #bcb3ad;
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.master-genres-pagination button.is-current {
+  border-color: #702d40;
+  background: #702d40;
+  color: #fff;
 }
 
 .master-genres-action:disabled {
@@ -326,5 +367,11 @@
 
   .master-genres-button--filter {
     width: 100%;
+  }
+
+  .master-genres-table-footer {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 13px 0 0;
   }
 }
