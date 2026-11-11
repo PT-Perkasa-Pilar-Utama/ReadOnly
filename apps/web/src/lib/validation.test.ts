@@ -52,6 +52,28 @@ describe('validasi FE sesuai AC', () => {
   test('AC-01.02: data valid tidak menghasilkan error', () => {
     expect(hasErrors(validateAccount(account))).toBe(false);
   });
+  test('password terisi di bawah 8 karakter mendapat pesan panjang minimum', () => {
+    for (const password of ['123', 'abcdefg', '!@#$%^&']) {
+      expect(
+        validateAccount({ ...account, password, confirm_password: password }),
+      ).toEqual({ password: 'Password minimal 8 karakter.' });
+    }
+  });
+  test('password tepat 8 karakter tidak memerlukan kombinasi jenis karakter', () => {
+    for (const password of ['12345678', 'abcdefgh', '!@#$%^&*']) {
+      expect(
+        validateAccount({ ...account, password, confirm_password: password }),
+      ).toEqual({});
+    }
+  });
+  test('password hanya spasi tetap mendapat pesan field wajib', () => {
+    expect(
+      validateAccount({ ...account, password: '   ', confirm_password: '   ' }),
+    ).toEqual({
+      password: 'Field harus diisi!',
+      confirm_password: 'Field harus diisi!',
+    });
+  });
   test('AC-12.03: alamat Member tidak boleh hanya spasi', () => {
     expect(
       validateEdit({ full_name: 'Uji', phone_number: '08', address: ' ' }),
