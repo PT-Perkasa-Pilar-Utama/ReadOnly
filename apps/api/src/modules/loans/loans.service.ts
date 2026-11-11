@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { sha256Hex } from '@readonly/db';
 import {
   type AdminLoanDetailData,
   type AdminLoanItem,
@@ -6,10 +7,12 @@ import {
   type ApiSuccessEnvelope,
   type CreateLoanInput,
   type CreateLoanResponseData,
+  calculateDueDateWib,
   calculateFine,
   computeFineAmount,
   getWibDateString,
   getWibDaysDifference,
+  LOAN_DURATION_DAYS,
   LOAN_MESSAGES,
   LOAN_STATUS_LABELS,
   type LoanQrResponseData,
@@ -17,6 +20,8 @@ import {
   type MyLoanItem,
   type MyLoansQuery,
   type PaginatedResponse,
+  type QrConfirmData,
+  type QrPreviewData,
   STATUS_MEMBER_ACTION_MAP,
 } from '@readonly/shared';
 import { type ClockPort, SystemClock } from '../../ports/clock';
@@ -25,6 +30,7 @@ import {
   createConflictError,
   createForbiddenError,
   createInvalidStateTransitionError,
+  createInvalidTokenError,
   createNotFoundError,
 } from '../../shared/errors';
 import type { LoansRepository } from './loans.repository';
@@ -41,7 +47,7 @@ const ALLOWED_TRANSITIONS: Record<LoanStatus, readonly LoanStatus[]> = {
 export interface LoanTransitionOptions {
   loanId: string;
   targetStatus: LoanStatus;
-  actorId?: string | null;
+  actorId?: string | null | undefined;
   context?: {
     todayWib?: string;
   };
@@ -51,6 +57,7 @@ export interface LoanTransitionResult {
   loanId: string;
   previousStatus: LoanStatus;
   currentStatus: LoanStatus;
+  dueDate?: string;
   lateDays?: number;
   fineAmount?: number | null;
 }
@@ -310,6 +317,25 @@ export class LoansService {
       );
     }
 
+    if (currentStatus === 'PENDING' && targetStatus === 'BORROWED') {
+      const now = this.clock.now();
+      const dueDate = calculateDueDateWib(now, LOAN_DURATION_DAYS);
+
+      const result = await this.repository.confirmPendingLoan({
+        loanId: loan.id,
+        adminId: options.actorId ?? '',
+        now,
+        dueDate,
+      });
+
+      return {
+        loanId: loan.id,
+        previousStatus: currentStatus,
+        currentStatus: targetStatus,
+        dueDate: result.dueDate,
+      };
+    }
+
     if (currentStatus === 'BORROWED' && targetStatus === 'OVERDUE') {
       if (loan.returnRequestedAt !== null) {
         throw createInvalidStateTransitionError(
@@ -351,5 +377,73 @@ export class LoansService {
     throw createInvalidStateTransitionError(
       `Transisi status ${targetStatus} belum diimplementasikan.`,
     );
+  }
+
+  async previewQrLoan(
+    qrToken: string,
+  ): Promise<ApiSuccessEnvelope<QrPreviewData>> {
+    if (typeof qrToken !== 'string' || qrToken.trim().length === 0) {
+      throw createInvalidTokenError('QR Code tidak valid');
+    }
+
+    const tokenHash = sha256Hex(qrToken.trim());
+    const record = await this.repository.findPendingLoanByQrHash(tokenHash);
+    if (!record) {
+      throw createInvalidTokenError('QR Code tidak valid');
+    }
+
+    const data: QrPreviewData = {
+      loan_id: record.loanId,
+      loan_no: record.loanNo,
+      borrower_name: record.borrowerName,
+      requested_at: record.requestedAt.toISOString(),
+      loan_duration_days: LOAN_DURATION_DAYS,
+      book: {
+        id: record.book.id,
+        title: record.book.title,
+        author: record.book.author,
+        publisher: record.book.publisher,
+        publication_year: record.book.publicationYear,
+        cover_url: record.book.coverPath
+          ? this.storage.getCoverUrl(record.book.coverPath)
+          : '',
+        genres: record.book.genres,
+      },
+    };
+
+    return {
+      data,
+    };
+  }
+
+  async confirmQrLoan(
+    qrToken: string,
+    adminId?: string,
+  ): Promise<ApiSuccessEnvelope<QrConfirmData>> {
+    if (typeof qrToken !== 'string' || qrToken.trim().length === 0) {
+      throw createInvalidTokenError('QR Code tidak valid');
+    }
+
+    const tokenHash = sha256Hex(qrToken.trim());
+    const preview = await this.repository.findPendingLoanByQrHash(tokenHash);
+    if (!preview) {
+      throw createInvalidTokenError('QR Code tidak valid');
+    }
+
+    const transitionResult = await this.transition({
+      loanId: preview.loanId,
+      targetStatus: 'BORROWED',
+      actorId: adminId,
+    });
+
+    return {
+      data: {
+        loan_id: preview.loanId,
+        status: 'BORROWED',
+        status_label: 'Sedang Dipinjam',
+        due_date: transitionResult.dueDate ?? '',
+      },
+      message: 'Buku berhasil Dipinjam',
+    };
   }
 }

@@ -48,6 +48,17 @@ export function isSameWibDay(dateA: Date, dateB: Date): boolean {
   return getWibDateString(dateA) === getWibDateString(dateB);
 }
 
+export function calculateDueDateWib(
+  confirmedAt: Date,
+  durationDays = 7,
+): string {
+  const wibTime = getWibDate(confirmedAt);
+  const dueWib = new Date(
+    wibTime.getTime() + durationDays * 24 * 60 * 60 * 1000,
+  );
+  return dueWib.toISOString().slice(0, 10);
+}
+
 export function calculateNextWibRunDelayMs(
   now: Date,
   targetHour = 0,

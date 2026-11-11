@@ -72,8 +72,8 @@ Base: `/api/v1`
 | Ajukan peminjaman | POST /loans | member | OK |
 | Loans me | GET /loans/me | member | OK |
 | QR token | GET /loans/:id/qr | member | OK |
-| Scan preview | POST /admin/loans/qr/preview | admin | TODO |
-| QR confirm | POST /admin/loans/qr/confirm | admin | TODO |
+| Scan preview | POST /admin/loans/qr/preview | admin | OK |
+| QR confirm | POST /admin/loans/qr/confirm | admin | OK |
 | Daftar pinjaman Admin | GET /admin/loans | admin | OK |
 | Detail peminjaman | GET /admin/loans/:id | admin | OK |
 | Fine payment | POST /admin/loans/:id/fine-payment | admin | TODO |
