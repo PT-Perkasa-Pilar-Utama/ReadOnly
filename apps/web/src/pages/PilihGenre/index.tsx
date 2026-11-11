@@ -1,5 +1,5 @@
 import { createQuery } from '@tanstack/solid-query';
-import { Link, useNavigate } from '@tanstack/solid-router';
+import { useNavigate } from '@tanstack/solid-router';
 import { getGenres, register } from '@web/api/auth';
 import { ApiError } from '@web/api/client';
 import AuthLayout from '@web/components/AuthLayout';
@@ -112,9 +112,6 @@ export default function GenresPage() {
         >
           {busy() ? 'Memproses…' : 'Daftar'}
         </button>
-        <p class="auth-switch">
-          <Link to="/register">Kembali ke data akun</Link>
-        </p>
       </form>
     </AuthLayout>
   );
