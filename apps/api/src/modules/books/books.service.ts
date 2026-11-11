@@ -4,7 +4,10 @@ import {
   type AdminGenreItem,
   API_MESSAGES,
   type ApiSuccessEnvelope,
+  type BookDetailItem,
   type BookMutationResponseData,
+  type CatalogBookItem,
+  type CatalogBooksResponse,
   type CreateGenreInput,
   type CreateGenreResponseData,
   type DeleteGenreResponseData,
@@ -26,10 +29,14 @@ import {
   createNotFoundError,
   createValidationError,
 } from '../../shared/errors';
-import type { BooksRepository } from './books.repository';
+import type {
+  BookRecordWithDetails,
+  BooksRepository,
+} from './books.repository';
 import type {
   AdminBooksQuery,
   AdminGenresQuery,
+  CatalogBooksQuery,
   ValidatedBookFormData,
 } from './books.schema';
 
@@ -87,6 +94,61 @@ export class BooksService implements ActiveGenreProvider {
     return uniqueIds.every((id) => activeSet.has(id));
   }
 
+  async listCatalogBooks(
+    query: CatalogBooksQuery,
+    userId?: string,
+  ): Promise<CatalogBooksResponse> {
+    const result = await this.repository.listAdminBooks({
+      q: query.q,
+      author: query.author,
+      genre: query.genre,
+      page: query.page,
+      limit: query.limit,
+    });
+
+    const totalPages =
+      result.total === 0 ? 0 : Math.ceil(result.total / query.limit);
+
+    const data: CatalogBookItem[] = result.data.map((book) =>
+      this.mapCatalogBook(book),
+    );
+
+    let recommendations: CatalogBookItem[] = [];
+    if (query.recommends && userId) {
+      const recRecords = await this.repository.findRecommendations(userId);
+      recommendations = recRecords.map((book) => this.mapCatalogBook(book));
+    }
+
+    return {
+      data,
+      recommendations,
+      authors: result.authors,
+      pagination: {
+        page: query.page,
+        limit: query.limit,
+        total: result.total,
+        totalPages,
+      },
+    };
+  }
+
+  private mapCatalogBook(book: BookRecordWithDetails): CatalogBookItem {
+    return {
+      id: book.id,
+      title: book.title,
+      author: book.author,
+      publisher: book.publisher,
+      publication_year: book.publicationYear,
+      cover_url: this.storage.getCoverUrl(book.coverPath ?? ''),
+      genres: book.genres,
+      available_count: book.availableCount,
+      is_available: book.availableCount > 0,
+      availability_label:
+        book.availableCount > 0 ? 'Tersedia' : 'Tidak Tersedia',
+      average_rating: book.averageRating,
+    };
+  }
+
   async listAdminBooks(query: AdminBooksQuery): Promise<AdminBooksResponse> {
     const result = await this.repository.listAdminBooks({
       q: query.q,
@@ -127,7 +189,7 @@ export class BooksService implements ActiveGenreProvider {
     };
   }
 
-  async getBookById(id: string): Promise<{ data: AdminBookItem }> {
+  async getBookById(id: string): Promise<{ data: BookDetailItem }> {
     const book = await this.repository.findBookById(id);
     if (!book) {
       throw createNotFoundError('Buku tidak ditemukan.');

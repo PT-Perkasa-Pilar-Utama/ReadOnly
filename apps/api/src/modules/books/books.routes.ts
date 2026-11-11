@@ -6,11 +6,12 @@ import {
 } from '@readonly/shared';
 import { Elysia } from 'elysia';
 import { createNotFoundError, fromZodError } from '../../shared/errors';
-import { requireRole } from '../auth/auth.routes';
+import { requireAuth, requireRole } from '../auth/auth.routes';
 import type { AuthService } from '../auth/auth.service';
 import {
   adminBooksQuerySchema,
   adminGenresQuerySchema,
+  catalogBooksQuerySchema,
   createGenreInputSchema,
   updateGenreInputSchema,
   validateBookFormData,
@@ -48,6 +49,31 @@ export function createBooksRoutes(
 
       set.headers['content-type'] = file.mimeType;
       return file.data;
+    })
+    .get('/books', async ({ query, request }) => {
+      let userId = '';
+      if (authService) {
+        const session = await requireAuth(request, authService);
+        userId = session.user.id;
+      }
+
+      const parsed = catalogBooksQuerySchema.safeParse(query);
+      if (!parsed.success) {
+        throw fromZodError(parsed.error);
+      }
+
+      return booksService.listCatalogBooks(parsed.data, userId);
+    })
+    .get('/books/:id', async ({ params: { id }, request }) => {
+      if (authService) {
+        await requireAuth(request, authService);
+      }
+
+      if (!UUID_REGEX.test(id)) {
+        throw createNotFoundError('Buku tidak ditemukan.');
+      }
+
+      return booksService.getBookById(id);
     })
     .get('/admin/books', async ({ query, request }) => {
       if (authService) {
