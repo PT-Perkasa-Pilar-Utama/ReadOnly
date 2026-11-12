@@ -80,7 +80,7 @@ Base: `/api/v1`
 | Ajukan pengembalian | POST /loans/:id/return | member | OK |
 | Konfirmasi pengembalian | POST /admin/loans/:id/return-confirmation | admin | OK |
 | Notifikasi | GET /notifications | member | OK |
-| Dashboard summary | GET /admin/dashboard/summary | admin | TODO |
+| Dashboard summary | GET /admin/dashboard/summary | admin | OK |
 | Health | GET /health | publik | OK |
 | Reset state | POST /admin/reset-state | non-prod | TODO |
 | Run job | POST /admin/jobs/run | non-prod | OK |
