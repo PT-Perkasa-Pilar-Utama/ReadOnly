@@ -1124,6 +1124,19 @@ tbody tr:hover {
   font-size: 13px;
   min-height: 100px;
 }
+.results-region {
+  position: relative;
+}
+.results-status {
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  padding-bottom: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
+  pointer-events: none;
+}
 .spinner {
   width: 19px;
   height: 19px;

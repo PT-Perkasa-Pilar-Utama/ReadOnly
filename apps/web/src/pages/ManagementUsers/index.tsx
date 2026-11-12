@@ -1,5 +1,5 @@
 import { USER_ROLE_LABELS, USER_STATUS_LABELS } from '@readonly/shared';
-import { createQuery } from '@tanstack/solid-query';
+import { createQuery, keepPreviousData } from '@tanstack/solid-query';
 import { Link, Outlet } from '@tanstack/solid-router';
 import type { User } from '@web/api/contracts';
 import { getUsers, setUserStatus } from '@web/api/users';
@@ -10,7 +10,7 @@ import Pagination from '@web/components/Pagination';
 import { debounced } from '@web/lib/debounced';
 import { queryClient } from '@web/lib/query';
 import { currentUser } from '@web/lib/session';
-import { createSignal, For, Show } from 'solid-js';
+import { batch, createSignal, For, Show } from 'solid-js';
 
 export default function UsersPage() {
   const [search, setSearch] = createSignal('');
@@ -24,6 +24,9 @@ export default function UsersPage() {
     queryKey: ['users', keyword(), role(), page()],
     queryFn: ({ signal }) =>
       getUsers({ q: keyword(), role: role(), page: page() }, signal),
+    // AC-12.01, AC-12.11: keep the search form and table mounted between queries.
+    placeholderData: keepPreviousData,
+    reconcile: 'id',
   }));
   async function changeStatus(user: User) {
     // AC-12.06, AC-12.08: ubah status dan invalidasi cache setelah API berhasil.
@@ -91,8 +94,11 @@ export default function UsersPage() {
             id="role-filter"
             value={role()}
             onChange={(event) => {
-              setRole(event.currentTarget.value);
-              setPage(1);
+              const value = event.currentTarget.value;
+              batch(() => {
+                setRole(value);
+                setPage(1);
+              });
             }}
           >
             <option value="">Semua Role</option>
@@ -101,101 +107,116 @@ export default function UsersPage() {
           </select>
         </div>
       </div>
-      <Show when={users.isPending}>
-        <Loading />
-      </Show>
-      <Show when={users.isError}>
-        <ErrorNotice error={users.error} retry={() => void users.refetch()} />
-      </Show>
-      <Show when={users.data} keyed>
-        {(data) => (
-          <>
-            <div class="table-container">
-              <table class="users-table">
-                <caption class="sr-only">Daftar user perpustakaan</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Nama Lengkap</th>
-                    <th scope="col">Email</th>
-                    <th scope="col">Nomor Ponsel</th>
-                    <th scope="col">Role</th>
-                    <th scope="col">Status</th>
-                    <th scope="col">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <For
-                    each={data.data}
-                    fallback={
-                      <tr>
-                        <td colspan={6}>
-                          <div class="empty-state">
-                            <Icon name="users" size={30} />
-                            <p>User tidak ditemukan</p>
-                          </div>
-                        </td>
-                      </tr>
-                    }
-                  >
-                    {(user) => (
-                      <tr>
-                        <td>
-                          <strong>{user.full_name}</strong>
-                          <Show when={user.id === currentUser()?.id}>
-                            <span class="self-label">Anda</span>
-                          </Show>
-                        </td>
-                        <td>{user.email}</td>
-                        <td>{user.phone_number}</td>
-                        <td>{USER_ROLE_LABELS[user.role]}</td>
-                        <td>
-                          <span
-                            class={`badge ${user.status === 'active' ? 'available' : 'unavailable'}`}
-                          >
-                            {USER_STATUS_LABELS[user.status]}
-                          </span>
-                        </td>
-                        <td>
-                          <div class="row-actions">
-                            <Link
-                              to="/admin/users/$userId/edit"
-                              params={{ userId: user.id }}
-                              class="icon-button edit-action"
-                              aria-label={`Edit ${user.full_name}`}
-                            >
-                              <Icon name="edit" size={17} />
-                            </Link>
-                            {/* AC-12.09: akun sendiri tidak dapat dinonaktifkan; AC-12.10 ditangani dari error API. */}
-                            <button
-                              type="button"
-                              class="status-action"
-                              disabled={busy() || user.id === currentUser()?.id}
-                              onClick={() => {
-                                if (user.status === 'active') setConfirm(user);
-                                else void changeStatus(user);
-                              }}
-                              aria-label={`${user.status === 'active' ? 'Nonaktifkan' : 'Aktifkan'} ${user.full_name}`}
-                            >
-                              {user.status === 'active'
-                                ? 'Nonaktifkan'
-                                : 'Aktifkan'}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </For>
-                </tbody>
-              </table>
-            </div>
-            <Pagination
-              pagination={data.pagination}
-              noun="user"
-              onChange={setPage}
+      <div class="results-region">
+        <div class="results-status" role="status">
+          <Show when={users.isFetching && !users.isPending}>
+            Memperbarui daftar user…
+          </Show>
+        </div>
+        <div aria-busy={users.isFetching}>
+          <Show when={users.isPending}>
+            <Loading />
+          </Show>
+          <Show when={users.isError}>
+            <ErrorNotice
+              error={users.error}
+              retry={() => void users.refetch()}
             />
-          </>
-        )}
-      </Show>
+          </Show>
+          <Show when={users.data}>
+            {(data) => (
+              <>
+                <div class="table-container">
+                  <table class="users-table">
+                    <caption class="sr-only">Daftar user perpustakaan</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">Nama Lengkap</th>
+                        <th scope="col">Email</th>
+                        <th scope="col">Nomor Ponsel</th>
+                        <th scope="col">Role</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <For
+                        each={data().data}
+                        fallback={
+                          <tr>
+                            <td colspan={6}>
+                              <div class="empty-state">
+                                <Icon name="users" size={30} />
+                                <p>User tidak ditemukan</p>
+                              </div>
+                            </td>
+                          </tr>
+                        }
+                      >
+                        {(user) => (
+                          <tr>
+                            <td>
+                              <strong>{user.full_name}</strong>
+                              <Show when={user.id === currentUser()?.id}>
+                                <span class="self-label">Anda</span>
+                              </Show>
+                            </td>
+                            <td>{user.email}</td>
+                            <td>{user.phone_number}</td>
+                            <td>{USER_ROLE_LABELS[user.role]}</td>
+                            <td>
+                              <span
+                                class={`badge ${user.status === 'active' ? 'available' : 'unavailable'}`}
+                              >
+                                {USER_STATUS_LABELS[user.status]}
+                              </span>
+                            </td>
+                            <td>
+                              <div class="row-actions">
+                                <Link
+                                  to="/admin/users/$userId/edit"
+                                  params={{ userId: user.id }}
+                                  class="icon-button edit-action"
+                                  aria-label={`Edit ${user.full_name}`}
+                                >
+                                  <Icon name="edit" size={17} />
+                                </Link>
+                                {/* AC-12.09: akun sendiri tidak dapat dinonaktifkan; AC-12.10 ditangani dari error API. */}
+                                <button
+                                  type="button"
+                                  class="status-action"
+                                  disabled={
+                                    busy() || user.id === currentUser()?.id
+                                  }
+                                  onClick={() => {
+                                    if (user.status === 'active')
+                                      setConfirm(user);
+                                    else void changeStatus(user);
+                                  }}
+                                  aria-label={`${user.status === 'active' ? 'Nonaktifkan' : 'Aktifkan'} ${user.full_name}`}
+                                >
+                                  {user.status === 'active'
+                                    ? 'Nonaktifkan'
+                                    : 'Aktifkan'}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </For>
+                    </tbody>
+                  </table>
+                </div>
+                <Pagination
+                  pagination={data().pagination}
+                  noun="user"
+                  onChange={setPage}
+                />
+              </>
+            )}
+          </Show>
+        </div>
+      </div>
       <Show when={confirm()}>
         {(user) => (
           <Modal
