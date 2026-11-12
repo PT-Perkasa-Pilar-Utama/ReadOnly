@@ -44,6 +44,18 @@ export function formatIndonesianDate(isoDateString: string): string {
   return `${day} ${monthName} ${year}`;
 }
 
+export function addDaysToWibDateString(
+  wibDateStr: string,
+  days: number,
+): string {
+  const [yearStr, monthStr, dayStr] = wibDateStr.split('-');
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  const day = Number(dayStr);
+  const date = new Date(Date.UTC(year, month - 1, day + days));
+  return date.toISOString().slice(0, 10);
+}
+
 export function isSameWibDay(dateA: Date, dateB: Date): boolean {
   return getWibDateString(dateA) === getWibDateString(dateB);
 }

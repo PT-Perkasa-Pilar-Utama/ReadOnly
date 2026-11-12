@@ -1789,6 +1789,14 @@ export class InMemoryLoansRepository implements LoansRepository {
     this.loans.push(loan);
   }
 
+  clearLoans(): void {
+    this.loans.length = 0;
+  }
+
+  clearNotifications(): void {
+    this.notifications.length = 0;
+  }
+
   getLoans(): readonly InMemoryLoan[] {
     return this.loans;
   }
