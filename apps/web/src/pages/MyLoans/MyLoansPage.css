@@ -224,3 +224,39 @@
     min-width: 780px;
   }
 }
+
+/* Member loan pagination */
+.my-loans-footer .pagination-row {
+  margin-top: 18px;
+}
+
+.my-loans-footer .pagination {
+  gap: 6px;
+  border: 0;
+  border-radius: 0;
+  overflow: visible;
+}
+
+.my-loans-footer .pagination button {
+  width: 44px;
+  height: 42px;
+  border: 1px solid #e7ded7;
+  border-right: 1px solid #e7ded7;
+  border-radius: 12px;
+  font-size: 17px;
+}
+
+.my-loans-footer .pagination button:last-child {
+  border-right: 1px solid #e7ded7;
+}
+
+@media (max-width: 760px) {
+  .my-loans-footer .pagination-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .my-loans-footer .pagination {
+    margin-left: 0;
+  }
+}

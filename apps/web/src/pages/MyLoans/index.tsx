@@ -186,16 +186,22 @@ export default function MyLoansPage() {
                   </tbody>
                 </table>
               </div>
-
-              <Pagination
-                pagination={result.pagination}
-                noun="pinjaman"
-                onChange={setPage}
-              />
             </>
           )}
         </Show>
       </section>
+
+      <Show when={loansQuery.data} keyed>
+        {(result) => (
+          <div class="my-loans-footer">
+            <Pagination
+              pagination={result.pagination}
+              noun="pinjaman"
+              onChange={setPage}
+            />
+          </div>
+        )}
+      </Show>
 
       <Show when={qrNoticeLoan()} keyed>
         {(loan) => (
