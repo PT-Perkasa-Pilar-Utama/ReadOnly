@@ -79,7 +79,7 @@ Base: `/api/v1`
 | Fine payment | POST /admin/loans/:id/fine-payment | admin | OK |
 | Ajukan pengembalian | POST /loans/:id/return | member | OK |
 | Konfirmasi pengembalian | POST /admin/loans/:id/return-confirmation | admin | OK |
-| Notifikasi | GET /notifications | member | TODO |
+| Notifikasi | GET /notifications | member | OK |
 | Dashboard summary | GET /admin/dashboard/summary | admin | TODO |
 | Health | GET /health | publik | OK |
 | Reset state | POST /admin/reset-state | non-prod | TODO |

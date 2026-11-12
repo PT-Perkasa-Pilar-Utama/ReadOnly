@@ -34,6 +34,13 @@ import {
 } from './modules/loans/loans.repository';
 import { createLoansRoutes } from './modules/loans/loans.routes';
 import { LoansService } from './modules/loans/loans.service';
+import {
+  DrizzleNotificationsRepository,
+  InMemoryNotificationsRepository,
+  type NotificationsRepository,
+} from './modules/notifications/notifications.repository';
+import { createNotificationsRoutes } from './modules/notifications/notifications.routes';
+import { NotificationsService } from './modules/notifications/notifications.service';
 import { createSystemRoutes, type HealthChecks } from './modules/system/health';
 import { type ClockPort, SystemClock } from './ports/clock';
 import {
@@ -59,6 +66,8 @@ export interface AppOptions {
   authService?: AuthService;
   loansRepository?: LoansRepository;
   loansService?: LoansService;
+  notificationsRepository?: NotificationsRepository | undefined;
+  notificationsService?: NotificationsService | undefined;
   jobsRepository?: JobsRepository | undefined;
   jobsService?: JobsService | undefined;
   enableScheduler?: boolean | undefined;
@@ -286,6 +295,23 @@ export function createApp(options?: AppOptions) {
       clock,
     });
 
+  const notificationsRepository =
+    options?.notificationsRepository ??
+    (options?.db
+      ? new DrizzleNotificationsRepository(options.db)
+      : new InMemoryNotificationsRepository(
+          loansRepository instanceof InMemoryLoansRepository
+            ? loansRepository
+            : undefined,
+        ));
+
+  const notificationsService =
+    options?.notificationsService ??
+    new NotificationsService({
+      repository: notificationsRepository,
+      clock,
+    });
+
   const jobsRepository =
     options?.jobsRepository ??
     (options?.db
@@ -298,6 +324,7 @@ export function createApp(options?: AppOptions) {
       repository: jobsRepository,
       loansRepository,
       loansService,
+      notificationsService,
       clock,
       ...(options?.autoCatchUp !== undefined
         ? { autoCatchUp: options.autoCatchUp }
@@ -327,5 +354,6 @@ export function createApp(options?: AppOptions) {
     .use(createBooksRoutes(booksService, authService))
     .use(createAuthRoutes(authService, registerRateLimiter, loginRateLimiter))
     .use(createLoansRoutes(loansService, authService, qrRateLimiter))
-    .use(createJobsRoutes(jobsService, clock));
+    .use(createJobsRoutes(jobsService, clock))
+    .use(createNotificationsRoutes(notificationsService, authService));
 }

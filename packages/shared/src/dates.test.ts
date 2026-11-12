@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import {
+  addDaysToWibDateString,
   calculateDueDateWib,
   calculateNextWibRunDelayMs,
   formatIndonesianDate,
@@ -72,5 +73,12 @@ describe('shared dates utilities (WIB)', () => {
     const midday = new Date('2026-11-09T03:35:00.000Z'); // 10:35 WIB
     const expectedDelay = (13 * 60 + 30) * 60 * 1000;
     expect(calculateNextWibRunDelayMs(midday, 0, 5)).toBe(expectedDelay);
+  });
+
+  it('adds calendar days to WIB date string correctly', () => {
+    expect(addDaysToWibDateString('2026-11-13', 3)).toBe('2026-11-16');
+    expect(addDaysToWibDateString('2026-11-30', 1)).toBe('2026-12-01');
+    expect(addDaysToWibDateString('2026-12-31', 1)).toBe('2027-01-01');
+    expect(addDaysToWibDateString('2026-11-16', -3)).toBe('2026-11-13');
   });
 });

@@ -5,3 +5,4 @@ export * from './constants';
 export * from './dates';
 export * from './genres';
 export * from './loans';
+export * from './notifications';
