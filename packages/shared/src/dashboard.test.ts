@@ -102,4 +102,3 @@ describe('shared dashboard schemas (BE-S2-04 / US-04 / AC-04.01)', () => {
     ).toBe(false);
   });
 });
-

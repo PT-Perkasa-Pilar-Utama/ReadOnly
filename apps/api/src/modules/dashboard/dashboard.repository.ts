@@ -22,7 +22,7 @@ export interface DashboardRepository {
 }
 
 export class DrizzleDashboardRepository implements DashboardRepository {
-  constructor(private readonly db: Database) {}
+  constructor(private readonly db: Database) { }
 
   async getSummary(): Promise<DashboardSummary> {
     const [booksRow] = await this.db

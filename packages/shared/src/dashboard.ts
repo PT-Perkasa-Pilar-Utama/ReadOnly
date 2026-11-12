@@ -26,4 +26,3 @@ export const dashboardSummaryResponseSchema = z.object({
 export type DashboardSummaryResponse = z.infer<
   typeof dashboardSummaryResponseSchema
 >;
-
