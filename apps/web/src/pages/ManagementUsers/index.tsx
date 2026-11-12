@@ -118,7 +118,10 @@ export default function UsersPage() {
             <Loading />
           </Show>
           <Show when={users.isError}>
-            <ErrorNotice error={users.error} retry={() => void users.refetch()} />
+            <ErrorNotice
+              error={users.error}
+              retry={() => void users.refetch()}
+            />
           </Show>
           <Show when={users.data}>
             {(data) => (
@@ -182,9 +185,12 @@ export default function UsersPage() {
                                 <button
                                   type="button"
                                   class="status-action"
-                                  disabled={busy() || user.id === currentUser()?.id}
+                                  disabled={
+                                    busy() || user.id === currentUser()?.id
+                                  }
                                   onClick={() => {
-                                    if (user.status === 'active') setConfirm(user);
+                                    if (user.status === 'active')
+                                      setConfirm(user);
                                     else void changeStatus(user);
                                   }}
                                   aria-label={`${user.status === 'active' ? 'Nonaktifkan' : 'Aktifkan'} ${user.full_name}`}

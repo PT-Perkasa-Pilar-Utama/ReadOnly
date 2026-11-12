@@ -10,7 +10,12 @@ export function BookCover(props: {
 }) {
   const [failed, setFailed] = createSignal(false);
   // AC-07.01, AC-07.04: a retained card must retry when its cover URL changes.
-  createEffect(on(() => props.src, () => setFailed(false)));
+  createEffect(
+    on(
+      () => props.src,
+      () => setFailed(false),
+    ),
+  );
   return (
     <div class={`book-cover ${props.class ?? ''}`}>
       <Show
