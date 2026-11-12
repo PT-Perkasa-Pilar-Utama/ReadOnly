@@ -1136,7 +1136,7 @@ export class InMemoryLoansRepository implements LoansRepository {
       publisher: 'Prentice Hall',
       publicationYear: 2008,
       synopsis: 'Panduan menulis kode yang bersih.',
-      availableCount: 3,
+      availableCount: 2,
       coverPath: 'clean-code.jpg',
       deletedAt: null,
       genres: ['Teknologi'],
@@ -1906,6 +1906,10 @@ export class InMemoryLoansRepository implements LoansRepository {
 
   getBook(bookId: string): InMemoryBook | undefined {
     return this.books.get(bookId);
+  }
+
+  getAllBooks(): readonly InMemoryBook[] {
+    return Array.from(this.books.values());
   }
 
   async returnLoanOnTime(params: ReturnLoanOnTimeParams): Promise<void> {

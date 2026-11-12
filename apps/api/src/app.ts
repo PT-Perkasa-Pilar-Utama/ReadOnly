@@ -21,6 +21,13 @@ import {
 import { createBooksRoutes } from './modules/books/books.routes';
 import { BooksService } from './modules/books/books.service';
 import {
+  type DashboardRepository,
+  DrizzleDashboardRepository,
+  InMemoryDashboardRepository,
+} from './modules/dashboard/dashboard.repository';
+import { createDashboardRoutes } from './modules/dashboard/dashboard.routes';
+import { DashboardService } from './modules/dashboard/dashboard.service';
+import {
   DrizzleJobsRepository,
   InMemoryJobsRepository,
   type JobsRepository,
@@ -70,6 +77,8 @@ export interface AppOptions {
   notificationsService?: NotificationsService | undefined;
   jobsRepository?: JobsRepository | undefined;
   jobsService?: JobsService | undefined;
+  dashboardRepository?: DashboardRepository | undefined;
+  dashboardService?: DashboardService | undefined;
   enableScheduler?: boolean | undefined;
   autoCatchUp?: boolean | undefined;
   registerRateLimiter?: RateLimiter;
@@ -335,6 +344,20 @@ export function createApp(options?: AppOptions) {
     jobsService.startScheduler();
   }
 
+  const dashboardRepository =
+    options?.dashboardRepository ??
+    (options?.db
+      ? new DrizzleDashboardRepository(options.db)
+      : new InMemoryDashboardRepository({
+          loansRepo:
+            loansRepository instanceof InMemoryLoansRepository
+              ? loansRepository
+              : undefined,
+        }));
+
+  const dashboardService =
+    options?.dashboardService ?? new DashboardService(dashboardRepository);
+
   const healthChecks = resolveHealthChecks(options);
 
   return new Elysia({ prefix: API_PREFIX })
@@ -355,5 +378,6 @@ export function createApp(options?: AppOptions) {
     .use(createAuthRoutes(authService, registerRateLimiter, loginRateLimiter))
     .use(createLoansRoutes(loansService, authService, qrRateLimiter))
     .use(createJobsRoutes(jobsService, clock))
-    .use(createNotificationsRoutes(notificationsService, authService));
+    .use(createNotificationsRoutes(notificationsService, authService))
+    .use(createDashboardRoutes(dashboardService, authService));
 }
