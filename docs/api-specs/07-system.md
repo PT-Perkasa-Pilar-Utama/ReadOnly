@@ -76,9 +76,9 @@ Base: `/api/v1`
 | QR confirm | POST /admin/loans/qr/confirm | admin | OK |
 | Daftar pinjaman Admin | GET /admin/loans | admin | OK |
 | Detail peminjaman | GET /admin/loans/:id | admin | OK |
-| Fine payment | POST /admin/loans/:id/fine-payment | admin | TODO |
-| Ajukan pengembalian | POST /loans/:id/return | member | TODO |
-| Konfirmasi pengembalian | POST /admin/loans/:id/return-confirmation | admin | TODO |
+| Fine payment | POST /admin/loans/:id/fine-payment | admin | OK |
+| Ajukan pengembalian | POST /loans/:id/return | member | OK |
+| Konfirmasi pengembalian | POST /admin/loans/:id/return-confirmation | admin | OK |
 | Notifikasi | GET /notifications | member | TODO |
 | Dashboard summary | GET /admin/dashboard/summary | admin | TODO |
 | Health | GET /health | publik | OK |

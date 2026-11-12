@@ -12,8 +12,10 @@ import type { AuthService } from '../auth/auth.service';
 import {
   adminLoansQuerySchema,
   createLoanInputSchema,
+  finePaymentInputSchema,
   myLoansQuerySchema,
   qrTokenInputSchema,
+  returnLoanInputSchema,
 } from './loans.schema';
 import type { LoansService } from './loans.service';
 
@@ -127,5 +129,66 @@ export function createLoansRoutes(
       }
 
       return loansService.confirmQrLoan(parsed.data.qr_token, adminId);
-    });
+    })
+    .post('/loans/:id/return', async ({ params: { id }, body, request }) => {
+      let userId: string;
+      if (authService) {
+        const session = await requireRole(request, authService, 'member');
+        userId = session.user.id;
+      } else {
+        userId = request.headers.get('x-user-id') ?? '';
+      }
+
+      if (!UUID_REGEX.test(id)) {
+        throw createNotFoundError('Peminjaman tidak ditemukan.');
+      }
+
+      const parsed = returnLoanInputSchema.safeParse(body ?? {});
+      if (!parsed.success) {
+        throw fromZodError(parsed.error);
+      }
+
+      return loansService.returnLoan(userId, id, parsed.data);
+    })
+    .post(
+      '/admin/loans/:id/fine-payment',
+      async ({ params: { id }, body, request }) => {
+        let adminId = '';
+        if (authService) {
+          const session = await requireRole(request, authService, 'admin');
+          adminId = session.user.id;
+        } else {
+          adminId = request.headers.get('x-user-id') ?? '';
+        }
+
+        if (!UUID_REGEX.test(id)) {
+          throw createNotFoundError('Peminjaman tidak ditemukan.');
+        }
+
+        const parsed = finePaymentInputSchema.safeParse(body ?? {});
+        if (!parsed.success) {
+          throw fromZodError(parsed.error);
+        }
+
+        return loansService.payFine(adminId, id, parsed.data);
+      },
+    )
+    .post(
+      '/admin/loans/:id/return-confirmation',
+      async ({ params: { id }, request }) => {
+        let adminId = '';
+        if (authService) {
+          const session = await requireRole(request, authService, 'admin');
+          adminId = session.user.id;
+        } else {
+          adminId = request.headers.get('x-user-id') ?? '';
+        }
+
+        if (!UUID_REGEX.test(id)) {
+          throw createNotFoundError('Peminjaman tidak ditemukan.');
+        }
+
+        return loansService.confirmReturn(adminId, id);
+      },
+    );
 }
