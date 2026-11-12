@@ -1,6 +1,10 @@
 import type { GenreStatus } from '@readonly/shared';
-import { createQuery, useQueryClient } from '@tanstack/solid-query';
-import { createSignal, For, Show } from 'solid-js';
+import {
+  createQuery,
+  keepPreviousData,
+  useQueryClient,
+} from '@tanstack/solid-query';
+import { batch, createSignal, For, onCleanup, Show } from 'solid-js';
 import {
   type AdminGenreItem,
   createAdminGenre,
@@ -13,7 +17,6 @@ import { AdminHeader } from '../../components/AdminHeader';
 import { requestAdminConfirmation } from '../../components/admin-feedback-store';
 import { ErrorNotice, Loading, notify } from '../../components/Feedback';
 import Modal from '../../components/Modal';
-import { debounced } from '../../lib/debounced';
 import './MasterGenresPage.css';
 
 interface GenreFormModalProps {
@@ -111,14 +114,39 @@ function GenreFormModal(props: GenreFormModalProps) {
 export default function MasterGenresPage() {
   const queryClient = useQueryClient();
   const [searchText, setSearchText] = createSignal('');
-  const searchTerm = debounced(searchText);
+  const [searchTerm, setSearchTerm] = createSignal('');
   const [page, setPage] = createSignal(1);
   const [formGenre, setFormGenre] = createSignal<AdminGenreItem | null>(null);
   const [formOpen, setFormOpen] = createSignal(false);
   const [busyGenreId, setBusyGenreId] = createSignal<string | null>(null);
+  let searchTimer: number | undefined;
+
+  onCleanup(() => {
+    if (searchTimer !== undefined) {
+      window.clearTimeout(searchTimer);
+    }
+  });
+
+  function handleSearchInput(value: string) {
+    setSearchText(value);
+
+    if (searchTimer !== undefined) {
+      window.clearTimeout(searchTimer);
+    }
+
+    searchTimer = window.setTimeout(() => {
+      searchTimer = undefined;
+      batch(() => {
+        setSearchTerm(value.trim());
+        setPage(1);
+      });
+    }, 400);
+  }
 
   const genresQuery = createQuery(() => ({
     queryKey: ['admin', 'genres', searchTerm(), page()],
+    placeholderData: keepPreviousData,
+    reconcile: 'id',
     queryFn: ({ signal }) =>
       getAdminGenreList({ q: searchTerm(), page: page(), limit: 10 }, signal),
   }));
@@ -137,8 +165,15 @@ export default function MasterGenresPage() {
   };
 
   function applySearch() {
-    setPage(1);
-    void genresQuery.refetch();
+    if (searchTimer !== undefined) {
+      window.clearTimeout(searchTimer);
+      searchTimer = undefined;
+    }
+
+    batch(() => {
+      setSearchTerm(searchText().trim());
+      setPage(1);
+    });
   }
 
   async function refreshGenreConsumers() {
@@ -168,8 +203,15 @@ export default function MasterGenresPage() {
     const wasCreating = formGenre() === null;
     setFormOpen(false);
     if (wasCreating) {
-      setSearchText('');
-      setPage(1);
+      if (searchTimer !== undefined) {
+        window.clearTimeout(searchTimer);
+        searchTimer = undefined;
+      }
+      batch(() => {
+        setSearchText('');
+        setSearchTerm('');
+        setPage(1);
+      });
     }
     await refreshGenreConsumers();
   }
@@ -263,10 +305,7 @@ export default function MasterGenresPage() {
             <input
               type="search"
               value={searchText()}
-              onInput={(event) => {
-                setSearchText(event.currentTarget.value);
-                setPage(1);
-              }}
+              onInput={(event) => handleSearchInput(event.currentTarget.value)}
               placeholder="Masukkan nama genre"
               aria-label="Cari nama genre"
             />
@@ -281,85 +320,123 @@ export default function MasterGenresPage() {
           </button>
         </fieldset>
 
-        <section class="master-genres-panel" aria-label="Daftar genre">
-          <Show when={genresQuery.isPending}>
-            <Loading label="Memuat daftar genre…" />
-          </Show>
+        <div class="results-region">
+          <div class="results-status" role="status">
+            <Show when={genresQuery.isFetching && !genresQuery.isPending}>
+              Memperbarui daftar genre…
+            </Show>
+          </div>
+          <section
+            class="master-genres-panel"
+            aria-label="Daftar genre"
+            aria-busy={genresQuery.isFetching}
+          >
+            <Show when={genresQuery.isPending}>
+              <Loading label="Memuat daftar genre…" />
+            </Show>
 
-          <Show when={genresQuery.isError}>
-            <div class="master-genres-state master-genres-state--error">
-              <ErrorNotice
-                error={genresQuery.error}
-                retry={() => void genresQuery.refetch()}
-              />
-            </div>
-          </Show>
+            <Show when={genresQuery.isError}>
+              <div class="master-genres-state master-genres-state--error">
+                <ErrorNotice
+                  error={genresQuery.error}
+                  retry={() => void genresQuery.refetch()}
+                />
+              </div>
+            </Show>
 
-          <Show when={!genresQuery.isPending && !genresQuery.isError}>
-            <div class="master-genres-table-wrap">
-              <table class="master-genres-table">
-                <thead>
-                  <tr>
-                    <th scope="col">Nama Genre</th>
-                    <th scope="col">Jumlah Buku</th>
-                    <th scope="col">Status</th>
-                    <th scope="col">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <Show
-                    when={(genresQuery.data?.genres.length ?? 0) > 0}
-                    fallback={
-                      <tr>
-                        <td colSpan={4} class="master-genres-empty">
-                          {searchTerm()
-                            ? 'Genre tidak ditemukan'
-                            : 'Belum ada genre.'}
-                        </td>
-                      </tr>
-                    }
-                  >
-                    <For each={genresQuery.data?.genres ?? []}>
-                      {(genre) => (
+            <Show when={genresQuery.data}>
+              <div class="master-genres-table-wrap">
+                <table class="master-genres-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Nama Genre</th>
+                      <th scope="col">Jumlah Buku</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <Show
+                      when={(genresQuery.data?.genres.length ?? 0) > 0}
+                      fallback={
                         <tr>
-                          <td class="master-genres-name">{genre.name}</td>
-                          <td>{genre.book_count} buku</td>
-                          <td>
-                            <span
-                              class={`master-genres-status master-genres-status--${
-                                genre.status
-                              }`}
-                            >
-                              {genre.status === 'active' ? 'Aktif' : 'Nonaktif'}
-                            </span>
+                          <td colSpan={4} class="master-genres-empty">
+                            {searchTerm()
+                              ? 'Genre tidak ditemukan'
+                              : 'Belum ada genre.'}
                           </td>
-                          <td>
-                            <div class="master-genres-actions">
-                              <button
-                                type="button"
-                                class="master-genres-action master-genres-action--icon"
-                                onClick={() => openEdit(genre)}
-                                disabled={busyGenreId() === genre.id}
-                                aria-label={`Edit ${genre.name}`}
-                                title="Edit"
+                        </tr>
+                      }
+                    >
+                      <For each={genresQuery.data?.genres ?? []}>
+                        {(genre) => (
+                          <tr>
+                            <td class="master-genres-name">{genre.name}</td>
+                            <td>{genre.book_count} buku</td>
+                            <td>
+                              <span
+                                class={`master-genres-status master-genres-status--${
+                                  genre.status
+                                }`}
                               >
-                                <svg viewBox="0 0 20 20" aria-hidden="true">
-                                  <path d="M3.5 13.9 13.7 3.7a1.8 1.8 0 0 1 2.6 0l.1.1a1.8 1.8 0 0 1 0 2.6L6.2 16.6l-3.1.8z" />
-                                  <path d="m11.9 5.5 2.6 2.6M3.1 17.4l3.1-.8" />
-                                </svg>
-                              </button>
-                              <Show
-                                when={genre.status === 'active'}
-                                fallback={
+                                {genre.status === 'active'
+                                  ? 'Aktif'
+                                  : 'Nonaktif'}
+                              </span>
+                            </td>
+                            <td>
+                              <div class="master-genres-actions">
+                                <button
+                                  type="button"
+                                  class="master-genres-action master-genres-action--icon"
+                                  onClick={() => openEdit(genre)}
+                                  disabled={busyGenreId() === genre.id}
+                                  aria-label={`Edit ${genre.name}`}
+                                  title="Edit"
+                                >
+                                  <svg viewBox="0 0 20 20" aria-hidden="true">
+                                    <path d="M3.5 13.9 13.7 3.7a1.8 1.8 0 0 1 2.6 0l.1.1a1.8 1.8 0 0 1 0 2.6L6.2 16.6l-3.1.8z" />
+                                    <path d="m11.9 5.5 2.6 2.6M3.1 17.4l3.1-.8" />
+                                  </svg>
+                                </button>
+                                <Show
+                                  when={genre.status === 'active'}
+                                  fallback={
+                                    <button
+                                      type="button"
+                                      class="master-genres-action master-genres-action--icon"
+                                      onClick={() =>
+                                        void changeStatus(genre, 'active')
+                                      }
+                                      disabled={busyGenreId() === genre.id}
+                                      aria-label={`Aktifkan ${genre.name}`}
+                                      title="Aktifkan"
+                                    >
+                                      <svg
+                                        viewBox="0 0 20 20"
+                                        aria-hidden="true"
+                                      >
+                                        <rect
+                                          x="2.5"
+                                          y="5.5"
+                                          width="15"
+                                          height="9"
+                                          rx="4.5"
+                                        />
+                                        <circle cx="7.5" cy="10" r="2.5" />
+                                      </svg>
+                                    </button>
+                                  }
+                                >
                                   <button
                                     type="button"
                                     class="master-genres-action master-genres-action--icon"
                                     onClick={() =>
-                                      void changeStatus(genre, 'active')
+                                      void changeStatus(genre, 'inactive')
                                     }
                                     disabled={busyGenreId() === genre.id}
-                                    aria-label={`Aktifkan ${genre.name}`}
-                                    title="Aktifkan"
+                                    aria-label={`Nonaktifkan ${genre.name}`}
+                                    title="Nonaktifkan"
                                   >
                                     <svg viewBox="0 0 20 20" aria-hidden="true">
                                       <rect
@@ -369,60 +446,38 @@ export default function MasterGenresPage() {
                                         height="9"
                                         rx="4.5"
                                       />
-                                      <circle cx="7.5" cy="10" r="2.5" />
+                                      <circle cx="12.5" cy="10" r="2.5" />
                                     </svg>
                                   </button>
-                                }
-                              >
+                                </Show>
                                 <button
                                   type="button"
-                                  class="master-genres-action master-genres-action--icon"
-                                  onClick={() =>
-                                    void changeStatus(genre, 'inactive')
+                                  class={
+                                    'master-genres-action master-genres-action--icon master-genres-action--delete'
                                   }
+                                  onClick={() => void removeGenre(genre)}
                                   disabled={busyGenreId() === genre.id}
-                                  aria-label={`Nonaktifkan ${genre.name}`}
-                                  title="Nonaktifkan"
+                                  aria-label={`Hapus ${genre.name}`}
+                                  title="Hapus"
                                 >
                                   <svg viewBox="0 0 20 20" aria-hidden="true">
-                                    <rect
-                                      x="2.5"
-                                      y="5.5"
-                                      width="15"
-                                      height="9"
-                                      rx="4.5"
-                                    />
-                                    <circle cx="12.5" cy="10" r="2.5" />
+                                    <path d="M4 5.5h12M7.2 5.5V3.8h5.6v1.7m-7.2 0 .7 10.8h6.9l.7-10.8M8 8.2v5.5m4-5.5v5.5" />
                                   </svg>
                                 </button>
-                              </Show>
-                              <button
-                                type="button"
-                                class={
-                                  'master-genres-action master-genres-action--icon master-genres-action--delete'
-                                }
-                                onClick={() => void removeGenre(genre)}
-                                disabled={busyGenreId() === genre.id}
-                                aria-label={`Hapus ${genre.name}`}
-                                title="Hapus"
-                              >
-                                <svg viewBox="0 0 20 20" aria-hidden="true">
-                                  <path d="M4 5.5h12M7.2 5.5V3.8h5.6v1.7m-7.2 0 .7 10.8h6.9l.7-10.8M8 8.2v5.5m4-5.5v5.5" />
-                                </svg>
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </For>
-                  </Show>
-                </tbody>
-              </table>
-            </div>
-          </Show>
-        </section>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </For>
+                    </Show>
+                  </tbody>
+                </table>
+              </div>
+            </Show>
+          </section>
+        </div>
 
-        <Show when={!genresQuery.isPending && !genresQuery.isError}>
+        <Show when={genresQuery.data}>
           <div class="master-genres-table-footer">
             <p>
               Menampilkan {genresQuery.data?.genres.length ?? 0} dari{' '}
