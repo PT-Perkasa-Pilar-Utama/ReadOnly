@@ -2,7 +2,7 @@
   min-height: 100vh;
   background: #f6f0e8;
   color: #2b2424;
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-ui);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -30,7 +30,7 @@
 .loan-management-heading h1 {
   margin: 0;
   color: #2b2424;
-  font-family: Georgia, 'Times New Roman', serif;
+  font-family: var(--font-heading);
   font-size: clamp(27px, 3vw, 34px);
   font-weight: 700;
   letter-spacing: -0.6px;
@@ -39,6 +39,7 @@
 
 .loan-management-heading p {
   margin: 7px 0 0;
+  font-family: var(--font-heading);
   color: #8a7d76;
   font-size: 12px;
   line-height: 1.45;
@@ -401,7 +402,7 @@
 .loan-detail-section h2 {
   margin: 0 0 17px;
   color: #382f2e;
-  font-family: Georgia, 'Times New Roman', serif;
+  font-family: var(--font-heading);
   font-size: 19px;
   line-height: 1.3;
 }
@@ -468,7 +469,7 @@
 .loan-detail-book__content h3 {
   margin: 0 0 18px;
   color: #332b29;
-  font-family: Georgia, 'Times New Roman', serif;
+  font-family: var(--font-heading);
   font-size: 22px;
   line-height: 1.3;
 }

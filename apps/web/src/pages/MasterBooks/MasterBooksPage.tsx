@@ -1,6 +1,10 @@
-import { createQuery, useQueryClient } from '@tanstack/solid-query';
+import {
+  createQuery,
+  keepPreviousData,
+  useQueryClient,
+} from '@tanstack/solid-query';
 import { useNavigate } from '@tanstack/solid-router';
-import { createEffect, createSignal, For, onCleanup, Show } from 'solid-js';
+import { batch, createSignal, For, onCleanup, Show } from 'solid-js';
 import {
   deleteAdminBook,
   getAdminBooks,
@@ -32,16 +36,29 @@ export function MasterBooksPage() {
   const [page, setPage] = createSignal(1);
   const [deletingBookId, setDeletingBookId] = createSignal<string | null>(null);
 
-  createEffect(() => {
-    const value = searchText().trim();
-    const timeoutId = window.setTimeout(() => setDebouncedSearch(value), 250);
-    onCleanup(() => window.clearTimeout(timeoutId));
+  let searchTimer: number | undefined;
+
+  onCleanup(() => {
+    if (searchTimer !== undefined) {
+      window.clearTimeout(searchTimer);
+    }
   });
 
-  createEffect(() => {
-    debouncedSearch();
-    setPage(1);
-  });
+  function handleSearchInput(value: string) {
+    setSearchText(value);
+
+    if (searchTimer !== undefined) {
+      window.clearTimeout(searchTimer);
+    }
+
+    searchTimer = window.setTimeout(() => {
+      searchTimer = undefined;
+      batch(() => {
+        setDebouncedSearch(value.trim());
+        setPage(1);
+      });
+    }, 400);
+  }
 
   const booksQuery = createQuery(() => ({
     queryKey: [
@@ -53,6 +70,8 @@ export function MasterBooksPage() {
       appliedGenre(),
       page(),
     ],
+    placeholderData: keepPreviousData,
+    reconcile: 'id',
     queryFn: ({ signal }) =>
       getAdminBooks(
         {
@@ -99,9 +118,17 @@ export function MasterBooksPage() {
   }
 
   function applyFilters() {
-    setAppliedAuthor(selectedAuthor());
-    setAppliedGenre(selectedGenre());
-    setPage(1);
+    if (searchTimer !== undefined) {
+      window.clearTimeout(searchTimer);
+      searchTimer = undefined;
+    }
+
+    batch(() => {
+      setDebouncedSearch(searchText().trim());
+      setAppliedAuthor(selectedAuthor());
+      setAppliedGenre(selectedGenre());
+      setPage(1);
+    });
   }
 
   const currentPage = () => booksQuery.data?.pagination.page ?? page();
@@ -145,7 +172,7 @@ export function MasterBooksPage() {
             <input
               type="search"
               value={searchText()}
-              onInput={(event) => setSearchText(event.currentTarget.value)}
+              onInput={(event) => handleSearchInput(event.currentTarget.value)}
               placeholder="Cari judul buku, penulis, atau genre"
               aria-label="Cari judul buku, penulis, atau genre"
             />
@@ -183,7 +210,7 @@ export function MasterBooksPage() {
             class="master-books-button master-books-button--filter"
             type="button"
             onClick={applyFilters}
-            disabled={genresQuery.isPending || booksQuery.isPending}
+            disabled={genresQuery.isPending}
           >
             Set Filter
           </button>
@@ -195,134 +222,151 @@ export function MasterBooksPage() {
           </p>
         </Show>
 
-        <section class="master-books-panel" aria-label="Daftar buku">
-          <Show when={booksQuery.isPending}>
-            <div class="master-books-state" aria-live="polite" aria-busy="true">
-              <span class="master-books-loader" aria-hidden="true" />
-            </div>
-          </Show>
+        <div class="results-region">
+          <div class="results-status" role="status">
+            <Show when={booksQuery.isFetching && !booksQuery.isPending}>
+              Memperbarui daftar buku…
+            </Show>
+          </div>
+          <section
+            class="master-books-panel"
+            aria-label="Daftar buku"
+            aria-busy={booksQuery.isFetching}
+          >
+            <Show when={booksQuery.isPending}>
+              <div
+                class="master-books-state"
+                aria-live="polite"
+                aria-busy="true"
+              >
+                <span class="master-books-loader" aria-hidden="true" />
+              </div>
+            </Show>
 
-          <Show when={booksQuery.isError}>
-            <div
-              class="master-books-state master-books-state--error"
-              role="alert"
-            >
-              {getErrorMessage(booksQuery.error)}
-            </div>
-          </Show>
+            <Show when={booksQuery.isError}>
+              <div
+                class="master-books-state master-books-state--error"
+                role="alert"
+              >
+                {getErrorMessage(booksQuery.error)}
+              </div>
+            </Show>
 
-          <Show when={!booksQuery.isPending && !booksQuery.isError}>
-            <div class="master-books-table-wrap">
-              <table class="master-books-table">
-                <thead>
-                  <tr>
-                    <th scope="col">Cover</th>
-                    <th scope="col">Judul Buku</th>
-                    <th scope="col">Penulis</th>
-                    <th scope="col">Penerbit</th>
-                    <th scope="col">Tahun Terbit</th>
-                    <th scope="col">Genre</th>
-                    <th scope="col">Ketersediaan</th>
-                    <th scope="col">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <Show
-                    when={(booksQuery.data?.books.length ?? 0) > 0}
-                    fallback={
-                      <tr>
-                        <td class="master-books-empty" colSpan={8}>
-                          Buku tidak ditemukan
-                        </td>
-                      </tr>
-                    }
-                  >
-                    <For each={booksQuery.data?.books ?? []}>
-                      {(book) => (
+            <Show when={booksQuery.data}>
+              <div class="master-books-table-wrap">
+                <table class="master-books-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Cover</th>
+                      <th scope="col">Judul Buku</th>
+                      <th scope="col">Penulis</th>
+                      <th scope="col">Penerbit</th>
+                      <th scope="col">Tahun Terbit</th>
+                      <th scope="col">Genre</th>
+                      <th scope="col">Ketersediaan</th>
+                      <th scope="col">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <Show
+                      when={(booksQuery.data?.books.length ?? 0) > 0}
+                      fallback={
                         <tr>
-                          <td>
-                            <div class="master-books-cover-thumb">
-                              <Show
-                                when={book.cover_url}
-                                fallback={<span aria-hidden="true">▤</span>}
-                              >
-                                <img
-                                  src={book.cover_url ?? ''}
-                                  alt={`Cover ${book.title}`}
-                                />
-                              </Show>
-                            </div>
-                          </td>
-                          <td class="master-books-title-cell">{book.title}</td>
-                          <td>{book.author}</td>
-                          <td>{book.publisher}</td>
-                          <td>{book.publication_year}</td>
-                          <td>
-                            <div class="master-books-genre-list">
-                              <For each={book.genres}>
-                                {(genre) => (
-                                  <span class="master-books-genre-item">
-                                    {genre.name}
-                                    <Show when={genre.status === 'inactive'}>
-                                      <small>Nonaktif</small>
-                                    </Show>
-                                  </span>
-                                )}
-                              </For>
-                            </div>
-                          </td>
-                          <td>
-                            <span class="master-books-availability">
-                              {numberFormatter.format(book.available_count)}{' '}
-                              tersedia
-                            </span>
-                          </td>
-                          <td>
-                            <div class="master-books-row-actions">
-                              <button
-                                class="master-books-icon-button"
-                                type="button"
-                                aria-label={`Edit ${book.title}`}
-                                title="Edit"
-                                onClick={() =>
-                                  void navigate({
-                                    to: '/admin/books/$bookId/edit',
-                                    params: { bookId: book.id },
-                                  })
-                                }
-                              >
-                                <svg viewBox="0 0 20 20" aria-hidden="true">
-                                  <path d="M3.5 13.9 13.7 3.7a1.8 1.8 0 0 1 2.6 0l.1.1a1.8 1.8 0 0 1 0 2.6L6.2 16.6l-3.1.8z" />
-                                  <path d="m11.9 5.5 2.6 2.6M3.1 17.4l3.1-.8" />
-                                </svg>
-                              </button>
-                              <button
-                                class="master-books-icon-button master-books-icon-button--danger"
-                                type="button"
-                                aria-label={`Hapus ${book.title}`}
-                                title="Hapus"
-                                disabled={deletingBookId() === book.id}
-                                onClick={() =>
-                                  void handleDelete(book.id, book.title)
-                                }
-                              >
-                                <svg viewBox="0 0 20 20" aria-hidden="true">
-                                  <path d="M4 5.5h12M7.2 5.5V3.8h5.6v1.7m-7.2 0 .7 10.8h6.9l.7-10.8M8 8.2v5.5m4-5.5v5.5" />
-                                </svg>
-                              </button>
-                            </div>
+                          <td class="master-books-empty" colSpan={8}>
+                            Buku tidak ditemukan
                           </td>
                         </tr>
-                      )}
-                    </For>
-                  </Show>
-                </tbody>
-              </table>
-            </div>
-          </Show>
-        </section>
+                      }
+                    >
+                      <For each={booksQuery.data?.books ?? []}>
+                        {(book) => (
+                          <tr>
+                            <td>
+                              <div class="master-books-cover-thumb">
+                                <Show
+                                  when={book.cover_url}
+                                  fallback={<span aria-hidden="true">▤</span>}
+                                >
+                                  <img
+                                    src={book.cover_url ?? ''}
+                                    alt={`Cover ${book.title}`}
+                                  />
+                                </Show>
+                              </div>
+                            </td>
+                            <td class="master-books-title-cell">
+                              {book.title}
+                            </td>
+                            <td>{book.author}</td>
+                            <td>{book.publisher}</td>
+                            <td>{book.publication_year}</td>
+                            <td>
+                              <div class="master-books-genre-list">
+                                <For each={book.genres}>
+                                  {(genre) => (
+                                    <span class="master-books-genre-item">
+                                      {genre.name}
+                                      <Show when={genre.status === 'inactive'}>
+                                        <small>Nonaktif</small>
+                                      </Show>
+                                    </span>
+                                  )}
+                                </For>
+                              </div>
+                            </td>
+                            <td>
+                              <span class="master-books-availability">
+                                {numberFormatter.format(book.available_count)}{' '}
+                                tersedia
+                              </span>
+                            </td>
+                            <td>
+                              <div class="master-books-row-actions">
+                                <button
+                                  class="master-books-icon-button"
+                                  type="button"
+                                  aria-label={`Edit ${book.title}`}
+                                  title="Edit"
+                                  onClick={() =>
+                                    void navigate({
+                                      to: '/admin/books/$bookId/edit',
+                                      params: { bookId: book.id },
+                                    })
+                                  }
+                                >
+                                  <svg viewBox="0 0 20 20" aria-hidden="true">
+                                    <path d="M3.5 13.9 13.7 3.7a1.8 1.8 0 0 1 2.6 0l.1.1a1.8 1.8 0 0 1 0 2.6L6.2 16.6l-3.1.8z" />
+                                    <path d="m11.9 5.5 2.6 2.6M3.1 17.4l3.1-.8" />
+                                  </svg>
+                                </button>
+                                <button
+                                  class="master-books-icon-button master-books-icon-button--danger"
+                                  type="button"
+                                  aria-label={`Hapus ${book.title}`}
+                                  title="Hapus"
+                                  disabled={deletingBookId() === book.id}
+                                  onClick={() =>
+                                    void handleDelete(book.id, book.title)
+                                  }
+                                >
+                                  <svg viewBox="0 0 20 20" aria-hidden="true">
+                                    <path d="M4 5.5h12M7.2 5.5V3.8h5.6v1.7m-7.2 0 .7 10.8h6.9l.7-10.8M8 8.2v5.5m4-5.5v5.5" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </For>
+                    </Show>
+                  </tbody>
+                </table>
+              </div>
+            </Show>
+          </section>
+        </div>
 
-        <Show when={!booksQuery.isPending && !booksQuery.isError}>
+        <Show when={booksQuery.data}>
           <div class="master-books-table-footer">
             <p>
               Menampilkan {booksQuery.data?.books.length ?? 0} dari{' '}
