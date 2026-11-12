@@ -231,6 +231,6 @@ API mengirim kode status bahasa Inggris (`status`) sekaligus label UI bahasa Ind
 | AC-08.04 | POST /loans (409) | TODO |
 | AC-08.05 | GET /loans/me | TODO |
 | AC-08.06 | POST /admin/loans/qr/preview, POST /admin/loans/qr/confirm | TODO |
-| AC-09.01, AC-09.02, AC-09.06 | POST /loans/:id/return | TODO |
-| AC-09.03, AC-09.05 | POST /admin/loans/:id/return-confirmation | TODO |
-| AC-09.04, AC-09.08, AC-09.09 | POST /admin/loans/:id/fine-payment | TODO |
+| AC-09.01, AC-09.02, AC-09.06 | POST /loans/:id/return | OK |
+| AC-09.03, AC-09.05 | POST /admin/loans/:id/return-confirmation | OK |
+| AC-09.04, AC-09.08, AC-09.09 | POST /admin/loans/:id/fine-payment | OK |

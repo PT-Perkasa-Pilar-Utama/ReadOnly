@@ -5,18 +5,27 @@ import {
   QA_PENDING_QR_TOKEN,
   sha256Hex,
 } from '@readonly/db';
-import type {
-  AdminLoanDetailResponse,
-  AdminLoansResponse,
-  ApiErrorEnvelope,
-  QrConfirmResponse,
-  QrPreviewResponse,
+import {
+  type AdminLoanDetailResponse,
+  type AdminLoansResponse,
+  type ApiErrorEnvelope,
+  FINE_PAYMENT_SUCCESS_MESSAGE,
+  FINE_REQUIRED_MESSAGE,
+  type FinePaymentResponse,
+  type QrConfirmResponse,
+  type QrPreviewResponse,
+  RATING_REQUIRED_MESSAGE,
+  RETURN_CONFIRM_SUCCESS_MESSAGE,
+  RETURN_SUCCESS_MESSAGE,
+  type ReturnConfirmResponse,
+  type ReturnLoanResponse,
 } from '@readonly/shared';
 import { createApp } from '../../app';
 import type { ClockPort } from '../../ports/clock';
 import { MemoryStorageAdapter } from '../../ports/storage';
 import {
   DrizzleLoansRepository,
+  type InMemoryLoan,
   InMemoryLoansRepository,
 } from './loans.repository';
 import { LoansService } from './loans.service';
@@ -991,6 +1000,403 @@ describe('loans module - DrizzleLoansRepository', () => {
     expect(loanUpdated).toBe(true);
     expect(eventInserted).toBe(true);
   });
+
+  it('DrizzleLoansRepository returnLoanOnTime handles success and error paths', async () => {
+    // 1. Throws not_found when loan is not found
+    const fakeDbNotFound = {
+      transaction: async (fn: (tx: unknown) => unknown) => {
+        const fakeTx = {
+          select: () => ({
+            from: () => ({
+              where: () => ({
+                for: async () => [],
+              }),
+            }),
+          }),
+        };
+        return await fn(fakeTx);
+      },
+    } as unknown as Database;
+
+    const repoNotFound = new DrizzleLoansRepository(fakeDbNotFound);
+    expect(
+      repoNotFound.returnLoanOnTime({
+        loanId: '00000000-0000-4000-8003-000000000001',
+        bookId: '00000000-0000-4000-8002-000000000001',
+        userId: '00000000-0000-4000-8001-000000000001',
+        score: 5,
+        now: new Date(),
+      }),
+    ).rejects.toThrow('Peminjaman tidak ditemukan.');
+
+    // 2. Throws invalid_state_transition when loan is not BORROWED
+    const fakeDbNotBorrowed = {
+      transaction: async (fn: (tx: unknown) => unknown) => {
+        const fakeTx = {
+          select: () => ({
+            from: () => ({
+              where: () => ({
+                for: async () => [
+                  {
+                    id: '00000000-0000-4000-8003-000000000001',
+                    bookId: '00000000-0000-4000-8002-000000000001',
+                    userId: '00000000-0000-4000-8001-000000000001',
+                    status: 'PENDING',
+                  },
+                ],
+              }),
+            }),
+          }),
+        };
+        return await fn(fakeTx);
+      },
+    } as unknown as Database;
+
+    const repoNotBorrowed = new DrizzleLoansRepository(fakeDbNotBorrowed);
+    expect(
+      repoNotBorrowed.returnLoanOnTime({
+        loanId: '00000000-0000-4000-8003-000000000001',
+        bookId: '00000000-0000-4000-8002-000000000001',
+        userId: '00000000-0000-4000-8001-000000000001',
+        score: 5,
+        now: new Date(),
+      }),
+    ).rejects.toThrow('Peminjaman bukan berstatus Sedang Dipinjam.');
+
+    // 3. Success path
+    let loanUpdated = false;
+    let ratingInserted = false;
+    let eventInserted = false;
+    const fakeDbSuccess = {
+      transaction: async (fn: (tx: unknown) => unknown) => {
+        const fakeTx = {
+          select: () => ({
+            from: () => ({
+              where: () => ({
+                for: async () => [
+                  {
+                    id: '00000000-0000-4000-8003-000000000001',
+                    bookId: '00000000-0000-4000-8002-000000000001',
+                    userId: '00000000-0000-4000-8001-000000000001',
+                    status: 'BORROWED',
+                  },
+                ],
+              }),
+            }),
+          }),
+          update: () => ({
+            set: () => ({
+              where: () => ({
+                returning: async () => {
+                  loanUpdated = true;
+                  return [{ id: '00000000-0000-4000-8003-000000000001' }];
+                },
+              }),
+            }),
+          }),
+          insert: () => ({
+            values: async () => {
+              if (!ratingInserted) {
+                ratingInserted = true;
+              } else {
+                eventInserted = true;
+              }
+            },
+          }),
+        };
+        return await fn(fakeTx);
+      },
+    } as unknown as Database;
+
+    const repoSuccess = new DrizzleLoansRepository(fakeDbSuccess);
+    await repoSuccess.returnLoanOnTime({
+      loanId: '00000000-0000-4000-8003-000000000001',
+      bookId: '00000000-0000-4000-8002-000000000001',
+      userId: '00000000-0000-4000-8001-000000000001',
+      score: 5,
+      now: new Date(),
+    });
+
+    expect(loanUpdated).toBe(true);
+    expect(ratingInserted).toBe(true);
+    expect(eventInserted).toBe(true);
+  });
+
+  it('DrizzleLoansRepository returnLoanOverdue handles success and error paths', async () => {
+    const fakeDbNotOverdue = {
+      transaction: async (fn: (tx: unknown) => unknown) => {
+        const fakeTx = {
+          select: () => ({
+            from: () => ({
+              where: () => ({
+                for: async () => [
+                  {
+                    id: '00000000-0000-4000-8003-000000000001',
+                    bookId: '00000000-0000-4000-8002-000000000001',
+                    userId: '00000000-0000-4000-8001-000000000001',
+                    status: 'BORROWED',
+                  },
+                ],
+              }),
+            }),
+          }),
+        };
+        return await fn(fakeTx);
+      },
+    } as unknown as Database;
+
+    const repoNotOverdue = new DrizzleLoansRepository(fakeDbNotOverdue);
+    expect(
+      repoNotOverdue.returnLoanOverdue({
+        loanId: '00000000-0000-4000-8003-000000000001',
+        bookId: '00000000-0000-4000-8002-000000000001',
+        userId: '00000000-0000-4000-8001-000000000001',
+        score: 4,
+        lateDays: 1,
+        fineAmount: 2000,
+        now: new Date(),
+      }),
+    ).rejects.toThrow('Peminjaman bukan berstatus Terlambat.');
+
+    let loanUpdated = false;
+    let ratingInserted = false;
+    let eventInserted = false;
+    const fakeDbSuccess = {
+      transaction: async (fn: (tx: unknown) => unknown) => {
+        const fakeTx = {
+          select: () => ({
+            from: () => ({
+              where: () => ({
+                for: async () => [
+                  {
+                    id: '00000000-0000-4000-8003-000000000001',
+                    bookId: '00000000-0000-4000-8002-000000000001',
+                    userId: '00000000-0000-4000-8001-000000000001',
+                    status: 'OVERDUE',
+                  },
+                ],
+              }),
+            }),
+          }),
+          update: () => ({
+            set: () => ({
+              where: () => ({
+                returning: async () => {
+                  loanUpdated = true;
+                  return [{ id: '00000000-0000-4000-8003-000000000001' }];
+                },
+              }),
+            }),
+          }),
+          insert: () => ({
+            values: async () => {
+              if (!ratingInserted) {
+                ratingInserted = true;
+              } else {
+                eventInserted = true;
+              }
+            },
+          }),
+        };
+        return await fn(fakeTx);
+      },
+    } as unknown as Database;
+
+    const repoSuccess = new DrizzleLoansRepository(fakeDbSuccess);
+    await repoSuccess.returnLoanOverdue({
+      loanId: '00000000-0000-4000-8003-000000000001',
+      bookId: '00000000-0000-4000-8002-000000000001',
+      userId: '00000000-0000-4000-8001-000000000001',
+      score: 4,
+      lateDays: 1,
+      fineAmount: 2000,
+      now: new Date(),
+    });
+
+    expect(loanUpdated).toBe(true);
+    expect(ratingInserted).toBe(true);
+    expect(eventInserted).toBe(true);
+  });
+
+  it('DrizzleLoansRepository payFine handles success and error paths', async () => {
+    const fakeDbPaid = {
+      transaction: async (fn: (tx: unknown) => unknown) => {
+        const fakeTx = {
+          select: () => ({
+            from: () => ({
+              where: () => ({
+                for: async () => [
+                  {
+                    id: '00000000-0000-4000-8003-000000000001',
+                    status: 'FINE_PENDING',
+                    fineStatus: 'Sudah Bayar',
+                  },
+                ],
+              }),
+            }),
+          }),
+        };
+        return await fn(fakeTx);
+      },
+    } as unknown as Database;
+
+    const repoPaid = new DrizzleLoansRepository(fakeDbPaid);
+    expect(
+      repoPaid.payFine({
+        loanId: '00000000-0000-4000-8003-000000000001',
+        adminId: '00000000-0000-4000-8001-000000000001',
+        fineAmount: 2000,
+        now: new Date(),
+      }),
+    ).rejects.toThrow(
+      'Peminjaman bukan berstatus Pending Keterlambatan atau denda sudah dibayar.',
+    );
+
+    let loanUpdated = false;
+    let eventInserted = false;
+    const fakeDbSuccess = {
+      transaction: async (fn: (tx: unknown) => unknown) => {
+        const fakeTx = {
+          select: () => ({
+            from: () => ({
+              where: () => ({
+                for: async () => [
+                  {
+                    id: '00000000-0000-4000-8003-000000000001',
+                    status: 'FINE_PENDING',
+                    fineStatus: 'Belum Bayar',
+                  },
+                ],
+              }),
+            }),
+          }),
+          update: () => ({
+            set: () => ({
+              where: () => ({
+                returning: async () => {
+                  loanUpdated = true;
+                  return [{ id: '00000000-0000-4000-8003-000000000001' }];
+                },
+              }),
+            }),
+          }),
+          insert: () => ({
+            values: async () => {
+              eventInserted = true;
+            },
+          }),
+        };
+        return await fn(fakeTx);
+      },
+    } as unknown as Database;
+
+    const repoSuccess = new DrizzleLoansRepository(fakeDbSuccess);
+    await repoSuccess.payFine({
+      loanId: '00000000-0000-4000-8003-000000000001',
+      adminId: '00000000-0000-4000-8001-000000000001',
+      fineAmount: 2000,
+      now: new Date(),
+    });
+
+    expect(loanUpdated).toBe(true);
+    expect(eventInserted).toBe(true);
+  });
+
+  it('DrizzleLoansRepository confirmReturn handles success, fine guard, and stock increment', async () => {
+    // 1. Rejects when FINE_PENDING and Belum Bayar
+    const fakeDbUnpaidFine = {
+      transaction: async (fn: (tx: unknown) => unknown) => {
+        const fakeTx = {
+          select: () => ({
+            from: () => ({
+              where: () => ({
+                for: async () => [
+                  {
+                    id: '00000000-0000-4000-8003-000000000001',
+                    bookId: '00000000-0000-4000-8002-000000000001',
+                    status: 'FINE_PENDING',
+                    fineStatus: 'Belum Bayar',
+                  },
+                ],
+              }),
+            }),
+          }),
+        };
+        return await fn(fakeTx);
+      },
+    } as unknown as Database;
+
+    const repoUnpaid = new DrizzleLoansRepository(fakeDbUnpaidFine);
+    expect(
+      repoUnpaid.confirmReturn({
+        loanId: '00000000-0000-4000-8003-000000000001',
+        bookId: '00000000-0000-4000-8002-000000000001',
+        adminId: '00000000-0000-4000-8001-000000000001',
+        previousStatus: 'FINE_PENDING',
+        now: new Date(),
+      }),
+    ).rejects.toThrow('Denda belum dibayar.');
+
+    // 2. Success path
+    let loanUpdated = false;
+    let stockIncremented = false;
+    let eventInserted = false;
+    const fakeDbSuccess = {
+      transaction: async (fn: (tx: unknown) => unknown) => {
+        const fakeTx = {
+          select: () => ({
+            from: () => ({
+              where: () => ({
+                for: async () => [
+                  {
+                    id: '00000000-0000-4000-8003-000000000001',
+                    bookId: '00000000-0000-4000-8002-000000000001',
+                    status: 'RETURN_PENDING',
+                    fineStatus: 'Belum Bayar',
+                  },
+                ],
+              }),
+            }),
+          }),
+          update: () => ({
+            set: () => ({
+              where: () => {
+                if (!loanUpdated) {
+                  return {
+                    returning: async () => {
+                      loanUpdated = true;
+                      return [{ id: '00000000-0000-4000-8003-000000000001' }];
+                    },
+                  };
+                }
+                stockIncremented = true;
+                return Promise.resolve();
+              },
+            }),
+          }),
+          insert: () => ({
+            values: async () => {
+              eventInserted = true;
+            },
+          }),
+        };
+        return await fn(fakeTx);
+      },
+    } as unknown as Database;
+
+    const repoSuccess = new DrizzleLoansRepository(fakeDbSuccess);
+    await repoSuccess.confirmReturn({
+      loanId: '00000000-0000-4000-8003-000000000001',
+      bookId: '00000000-0000-4000-8002-000000000001',
+      adminId: '00000000-0000-4000-8001-000000000001',
+      previousStatus: 'RETURN_PENDING',
+      now: new Date(),
+    });
+
+    expect(loanUpdated).toBe(true);
+    expect(stockIncremented).toBe(true);
+    expect(eventInserted).toBe(true);
+  });
 });
 
 describe('loans module - QR preview & confirm RBAC & Rate Limiting (BE-S2-03 / SEC-02, SEC-05, SEC-06)', () => {
@@ -1909,6 +2315,743 @@ describe('Loans API - BE-S2-02: Ajukan pinjam + token QR', () => {
       );
 
       expect(res.status).toBe(404);
+    });
+  });
+
+  describe('BE-S3-03: POST /loans/:id/return (ajukan pengembalian + rating, Member)', () => {
+    it('returns 401 when unauthenticated', async () => {
+      const { app } = createTestHarness();
+
+      const res = await app.handle(
+        new Request(
+          `http://localhost/api/v1/loans/${QA_IDS.loans.borrow0}/return`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ score: 5 }),
+          },
+        ),
+      );
+
+      expect(res.status).toBe(401);
+    });
+
+    it('returns 403 when called by admin', async () => {
+      const { app, getAdminHeaders } = createTestHarness();
+      const headers = await getAdminHeaders();
+
+      const res = await app.handle(
+        new Request(
+          `http://localhost/api/v1/loans/${QA_IDS.loans.borrow0}/return`,
+          {
+            method: 'POST',
+            headers: { ...headers, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ score: 5 }),
+          },
+        ),
+      );
+
+      expect(res.status).toBe(403);
+    });
+
+    it('returns 404 when loan id is not a valid UUID', async () => {
+      const { app, getMemberHeaders } = createTestHarness();
+      const headers = await getMemberHeaders();
+
+      const res = await app.handle(
+        new Request('http://localhost/api/v1/loans/invalid-uuid/return', {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ score: 5 }),
+        }),
+      );
+
+      expect(res.status).toBe(404);
+    });
+
+    it('returns 404 when loan does not exist', async () => {
+      const { app, getMemberHeaders } = createTestHarness();
+      const headers = await getMemberHeaders();
+
+      const res = await app.handle(
+        new Request(
+          'http://localhost/api/v1/loans/00000000-0000-4000-8099-000000000999/return',
+          {
+            method: 'POST',
+            headers: { ...headers, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ score: 5 }),
+          },
+        ),
+      );
+
+      expect(res.status).toBe(404);
+    });
+
+    it('returns 403 when attempting to return another member loan (SEC-05)', async () => {
+      const { app, getMember2Headers } = createTestHarness();
+      const headers = await getMember2Headers();
+
+      const res = await app.handle(
+        new Request(
+          `http://localhost/api/v1/loans/${QA_IDS.loans.borrow0}/return`,
+          {
+            method: 'POST',
+            headers: { ...headers, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ score: 5 }),
+          },
+        ),
+      );
+
+      expect(res.status).toBe(403);
+      const json = (await res.json()) as ApiErrorEnvelope;
+      expect(json.code).toBe('forbidden');
+      expect(json.message).toBe('Akses ditolak.');
+    });
+
+    it('enforces rating mandatory with verbatim AC-09.06 message on invalid scores', async () => {
+      const { app, getMemberHeaders } = createTestHarness();
+      const headers = await getMemberHeaders();
+
+      const invalidPayloads = [
+        {},
+        { score: undefined },
+        { score: null },
+        { score: 0 },
+        { score: 6 },
+        { score: 3.5 },
+        { score: '5' },
+        { score: -1 },
+      ];
+
+      for (const payload of invalidPayloads) {
+        const res = await app.handle(
+          new Request(
+            `http://localhost/api/v1/loans/${QA_IDS.loans.borrow0}/return`,
+            {
+              method: 'POST',
+              headers: { ...headers, 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            },
+          ),
+        );
+
+        expect(res.status).toBe(422);
+        const json = (await res.json()) as ApiErrorEnvelope;
+        expect(json.code).toBe('invalid_request');
+        expect(json.message).toBe(RATING_REQUIRED_MESSAGE);
+      }
+    });
+
+    it('successfully returns on-time loan (BORROWED -> RETURN_PENDING, AC-09.01)', async () => {
+      const { app, getMemberHeaders, loansRepository } = createTestHarness();
+      const headers = await getMemberHeaders();
+
+      const res = await app.handle(
+        new Request(
+          `http://localhost/api/v1/loans/${QA_IDS.loans.borrow0}/return`,
+          {
+            method: 'POST',
+            headers: { ...headers, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ score: 5 }),
+          },
+        ),
+      );
+
+      expect(res.status).toBe(200);
+      const json = (await res.json()) as ReturnLoanResponse;
+      expect(json.message).toBe(RETURN_SUCCESS_MESSAGE);
+      expect(json.data.loan_id).toBe(QA_IDS.loans.borrow0);
+      expect(json.data.status).toBe('RETURN_PENDING');
+      expect(json.data.status_label).toBe('Pending Pengembalian');
+
+      const loanRecord = await loansRepository.findLoanRecordById(
+        QA_IDS.loans.borrow0,
+      );
+      expect(loanRecord?.status).toBe('RETURN_PENDING');
+      expect(loanRecord?.returnRequestedAt).not.toBeNull();
+      expect(loanRecord?.lateDays).toBe(0);
+      expect(loanRecord?.fineAmount).toBe(0);
+
+      const ratings = loansRepository.getRatings(QA_IDS.loans.borrow0);
+      expect(ratings.length).toBe(1);
+      expect(ratings[0]?.score).toBe(5);
+      expect(ratings[0]?.userId).toBe(QA_IDS.users.member1);
+
+      const events = loansRepository.getLoanEvents(QA_IDS.loans.borrow0);
+      const returnEvent = events.find((e) => e.toStatus === 'RETURN_PENDING');
+      expect(returnEvent).toBeDefined();
+      expect(returnEvent?.fromStatus).toBe('BORROWED');
+      expect(returnEvent?.actorId).toBe(QA_IDS.users.member1);
+    });
+
+    it('successfully returns overdue loan 1-4 days (OVERDUE -> FINE_PENDING, AC-09.02)', async () => {
+      const { app, getMemberHeaders, loansRepository } = createTestHarness();
+      const headers = await getMemberHeaders();
+
+      const res = await app.handle(
+        new Request(
+          `http://localhost/api/v1/loans/${QA_IDS.loans.over1}/return`,
+          {
+            method: 'POST',
+            headers: { ...headers, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ score: 4 }),
+          },
+        ),
+      );
+
+      expect(res.status).toBe(200);
+      const json = (await res.json()) as ReturnLoanResponse;
+      expect(json.message).toBe(RETURN_SUCCESS_MESSAGE);
+      expect(json.data.loan_id).toBe(QA_IDS.loans.over1);
+      expect(json.data.status).toBe('FINE_PENDING');
+      expect(json.data.status_label).toBe('Pending Keterlambatan');
+
+      const loanRecord = await loansRepository.findLoanRecordById(
+        QA_IDS.loans.over1,
+      );
+      expect(loanRecord?.status).toBe('FINE_PENDING');
+      expect(loanRecord?.returnRequestedAt).not.toBeNull();
+      expect(loanRecord?.lateDays).toBe(1);
+      expect(loanRecord?.fineAmount).toBe(2000);
+      expect(loanRecord?.fineStatus).toBe('Belum Bayar');
+
+      const ratings = loansRepository.getRatings(QA_IDS.loans.over1);
+      expect(ratings.length).toBe(1);
+      expect(ratings[0]?.score).toBe(4);
+
+      const events = loansRepository.getLoanEvents(QA_IDS.loans.over1);
+      const returnEvent = events.find((e) => e.toStatus === 'FINE_PENDING');
+      expect(returnEvent).toBeDefined();
+      expect(returnEvent?.fromStatus).toBe('OVERDUE');
+    });
+
+    it('successfully returns overdue loan >= 5 days (OVERDUE -> FINE_PENDING, AC-09.02)', async () => {
+      const { app, getMemberHeaders, loansRepository } = createTestHarness();
+      const headers = await getMemberHeaders();
+
+      const res = await app.handle(
+        new Request(
+          `http://localhost/api/v1/loans/${QA_IDS.loans.over5}/return`,
+          {
+            method: 'POST',
+            headers: { ...headers, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ score: 5 }),
+          },
+        ),
+      );
+
+      expect(res.status).toBe(200);
+      const json = (await res.json()) as ReturnLoanResponse;
+      expect(json.message).toBe(RETURN_SUCCESS_MESSAGE);
+      expect(json.data.loan_id).toBe(QA_IDS.loans.over5);
+      expect(json.data.status).toBe('FINE_PENDING');
+      expect(json.data.status_label).toBe('Pending Keterlambatan');
+
+      const loanRecord = await loansRepository.findLoanRecordById(
+        QA_IDS.loans.over5,
+      );
+      expect(loanRecord?.status).toBe('FINE_PENDING');
+      expect(loanRecord?.returnRequestedAt).not.toBeNull();
+      expect(loanRecord?.lateDays).toBe(5);
+      expect(loanRecord?.fineAmount).toBeNull();
+      expect(loanRecord?.fineStatus).toBe('Belum Bayar');
+    });
+
+    it('rejects return with 422 when status is not BORROWED or OVERDUE', async () => {
+      const { app, getMemberHeaders } = createTestHarness();
+      const headers = await getMemberHeaders();
+
+      const invalidLoans = [
+        QA_IDS.loans.pending,
+        QA_IDS.loans.retPend,
+        QA_IDS.loans.finePend,
+        QA_IDS.loans.returnedOn,
+      ];
+
+      for (const loanId of invalidLoans) {
+        const res = await app.handle(
+          new Request(`http://localhost/api/v1/loans/${loanId}/return`, {
+            method: 'POST',
+            headers: { ...headers, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ score: 5 }),
+          }),
+        );
+
+        expect(res.status).toBe(422);
+        const json = (await res.json()) as ApiErrorEnvelope;
+        expect(json.code).toBe('invalid_state_transition');
+      }
+    });
+  });
+
+  describe('BE-S3-04: POST /admin/loans/:id/fine-payment (pembayaran denda)', () => {
+    it('returns 401 when unauthenticated', async () => {
+      const { app } = createTestHarness();
+
+      const res = await app.handle(
+        new Request(
+          `http://localhost/api/v1/admin/loans/${QA_IDS.loans.finePend}/fine-payment`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ amount: 10000 }),
+          },
+        ),
+      );
+
+      expect(res.status).toBe(401);
+    });
+
+    it('returns 403 when called by member', async () => {
+      const { app, getMemberHeaders } = createTestHarness();
+      const headers = await getMemberHeaders();
+
+      const res = await app.handle(
+        new Request(
+          `http://localhost/api/v1/admin/loans/${QA_IDS.loans.finePend}/fine-payment`,
+          {
+            method: 'POST',
+            headers: { ...headers, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ amount: 10000 }),
+          },
+        ),
+      );
+
+      expect(res.status).toBe(403);
+    });
+
+    it('returns 404 when loan id is not a valid UUID', async () => {
+      const { app, getAdminHeaders } = createTestHarness();
+      const headers = await getAdminHeaders();
+
+      const res = await app.handle(
+        new Request(
+          'http://localhost/api/v1/admin/loans/invalid-uuid/fine-payment',
+          {
+            method: 'POST',
+            headers: { ...headers, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ amount: 10000 }),
+          },
+        ),
+      );
+
+      expect(res.status).toBe(404);
+    });
+
+    it('returns 404 when loan does not exist', async () => {
+      const { app, getAdminHeaders } = createTestHarness();
+      const headers = await getAdminHeaders();
+
+      const res = await app.handle(
+        new Request(
+          'http://localhost/api/v1/admin/loans/00000000-0000-4000-8099-000000000999/fine-payment',
+          {
+            method: 'POST',
+            headers: { ...headers, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ amount: 10000 }),
+          },
+        ),
+      );
+
+      expect(res.status).toBe(404);
+    });
+
+    it('rejects with 422 when status is not FINE_PENDING', async () => {
+      const { app, getAdminHeaders } = createTestHarness();
+      const headers = await getAdminHeaders();
+
+      const invalidLoans = [
+        QA_IDS.loans.pending,
+        QA_IDS.loans.borrow0,
+        QA_IDS.loans.over1,
+        QA_IDS.loans.retPend,
+        QA_IDS.loans.returnedOn,
+      ];
+
+      for (const loanId of invalidLoans) {
+        const res = await app.handle(
+          new Request(
+            `http://localhost/api/v1/admin/loans/${loanId}/fine-payment`,
+            {
+              method: 'POST',
+              headers: { ...headers, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ amount: 10000 }),
+            },
+          ),
+        );
+
+        expect(res.status).toBe(422);
+        const json = (await res.json()) as ApiErrorEnvelope;
+        expect(json.code).toBe('invalid_state_transition');
+      }
+    });
+
+    it('rejects with 422 when fine_status is already Sudah Bayar', async () => {
+      const { app, getAdminHeaders } = createTestHarness();
+      const headers = await getAdminHeaders();
+
+      const res = await app.handle(
+        new Request(
+          `http://localhost/api/v1/admin/loans/${QA_IDS.loans.finePaid}/fine-payment`,
+          {
+            method: 'POST',
+            headers: { ...headers, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ amount: 15000 }),
+          },
+        ),
+      );
+
+      expect(res.status).toBe(422);
+      const json = (await res.json()) as ApiErrorEnvelope;
+      expect(json.code).toBe('invalid_state_transition');
+    });
+
+    it('successfully processes automatic fine for 1-4 days (AC-09.04)', async () => {
+      const { app, getAdminHeaders, loansRepository } = createTestHarness(
+        (repo) => {
+          // Add a FINE_PENDING loan with lateDays = 2, Belum Bayar
+          const loan: InMemoryLoan = {
+            id: '00000000-0000-4000-8003-000000000099',
+            loanNo: 'PJM-20261109-0099',
+            userId: QA_IDS.users.member1,
+            bookId: QA_IDS.books.bookC,
+            status: 'FINE_PENDING',
+            requestedAt: new Date(),
+            confirmedAt: new Date(),
+            dueDate: '2026-11-07',
+            returnRequestedAt: new Date(),
+            returnedAt: null,
+            lateDays: 2,
+            fineAmount: 2000,
+            fineStatus: 'Belum Bayar',
+          };
+          repo.addLoan(loan);
+        },
+      );
+      const headers = await getAdminHeaders();
+
+      const res = await app.handle(
+        new Request(
+          'http://localhost/api/v1/admin/loans/00000000-0000-4000-8003-000000000099/fine-payment',
+          {
+            method: 'POST',
+            headers: { ...headers, 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+          },
+        ),
+      );
+
+      expect(res.status).toBe(200);
+      const json = (await res.json()) as FinePaymentResponse;
+      expect(json.message).toBe(FINE_PAYMENT_SUCCESS_MESSAGE);
+      expect(json.data.fine_amount).toBe(2000);
+      expect(json.data.fine_status).toBe('Sudah Bayar');
+
+      const loanRecord = await loansRepository.findLoanRecordById(
+        '00000000-0000-4000-8003-000000000099',
+      );
+      expect(loanRecord?.fineAmount).toBe(2000);
+      expect(loanRecord?.fineStatus).toBe('Sudah Bayar');
+
+      const events = loansRepository.getLoanEvents(
+        '00000000-0000-4000-8003-000000000099',
+      );
+      const payEvent = events.find(
+        (e) => e.fromStatus === 'FINE_PENDING' && e.toStatus === 'FINE_PENDING',
+      );
+      expect(payEvent).toBeDefined();
+    });
+
+    it('enforces validation for >= 5 days with verbatim AC-09.09 message', async () => {
+      const { app, getAdminHeaders } = createTestHarness();
+      const headers = await getAdminHeaders();
+
+      const invalidPayloads = [
+        {},
+        { amount: undefined },
+        { amount: null },
+        { amount: 0 },
+        { amount: -500 },
+        { amount: '5000' },
+        { amount: 100_000_000 },
+        { amount: 12.5 },
+      ];
+
+      for (const payload of invalidPayloads) {
+        const res = await app.handle(
+          new Request(
+            `http://localhost/api/v1/admin/loans/${QA_IDS.loans.finePend}/fine-payment`,
+            {
+              method: 'POST',
+              headers: { ...headers, 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            },
+          ),
+        );
+
+        expect(res.status).toBe(422);
+        const json = (await res.json()) as ApiErrorEnvelope;
+        expect(json.message).toBe(FINE_REQUIRED_MESSAGE);
+      }
+    });
+
+    it('successfully processes manual fine for >= 5 days (AC-09.08)', async () => {
+      const { app, getAdminHeaders, loansRepository } = createTestHarness();
+      const headers = await getAdminHeaders();
+
+      const res = await app.handle(
+        new Request(
+          `http://localhost/api/v1/admin/loans/${QA_IDS.loans.finePend}/fine-payment`,
+          {
+            method: 'POST',
+            headers: { ...headers, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ amount: 25000 }),
+          },
+        ),
+      );
+
+      expect(res.status).toBe(200);
+      const json = (await res.json()) as FinePaymentResponse;
+      expect(json.message).toBe(FINE_PAYMENT_SUCCESS_MESSAGE);
+      expect(json.data.fine_amount).toBe(25000);
+      expect(json.data.fine_status).toBe('Sudah Bayar');
+
+      const loanRecord = await loansRepository.findLoanRecordById(
+        QA_IDS.loans.finePend,
+      );
+      expect(loanRecord?.fineAmount).toBe(25000);
+      expect(loanRecord?.fineStatus).toBe('Sudah Bayar');
+
+      const events = loansRepository.getLoanEvents(QA_IDS.loans.finePend);
+      const payEvent = events.find(
+        (e) => e.fromStatus === 'FINE_PENDING' && e.toStatus === 'FINE_PENDING',
+      );
+      expect(payEvent).toBeDefined();
+    });
+  });
+
+  describe('BE-S3-04: POST /admin/loans/:id/return-confirmation (konfirmasi pengembalian)', () => {
+    it('returns 401 when unauthenticated', async () => {
+      const { app } = createTestHarness();
+
+      const res = await app.handle(
+        new Request(
+          `http://localhost/api/v1/admin/loans/${QA_IDS.loans.retPend}/return-confirmation`,
+          {
+            method: 'POST',
+          },
+        ),
+      );
+
+      expect(res.status).toBe(401);
+    });
+
+    it('returns 403 when called by member', async () => {
+      const { app, getMemberHeaders } = createTestHarness();
+      const headers = await getMemberHeaders();
+
+      const res = await app.handle(
+        new Request(
+          `http://localhost/api/v1/admin/loans/${QA_IDS.loans.retPend}/return-confirmation`,
+          {
+            method: 'POST',
+            headers,
+          },
+        ),
+      );
+
+      expect(res.status).toBe(403);
+    });
+
+    it('returns 404 when loan id is not a valid UUID', async () => {
+      const { app, getAdminHeaders } = createTestHarness();
+      const headers = await getAdminHeaders();
+
+      const res = await app.handle(
+        new Request(
+          'http://localhost/api/v1/admin/loans/invalid-uuid/return-confirmation',
+          {
+            method: 'POST',
+            headers,
+          },
+        ),
+      );
+
+      expect(res.status).toBe(404);
+    });
+
+    it('returns 404 when loan does not exist', async () => {
+      const { app, getAdminHeaders } = createTestHarness();
+      const headers = await getAdminHeaders();
+
+      const res = await app.handle(
+        new Request(
+          'http://localhost/api/v1/admin/loans/00000000-0000-4000-8099-000000000999/return-confirmation',
+          {
+            method: 'POST',
+            headers,
+          },
+        ),
+      );
+
+      expect(res.status).toBe(404);
+    });
+
+    it('rejects with 422 when status is not RETURN_PENDING or FINE_PENDING', async () => {
+      const { app, getAdminHeaders } = createTestHarness();
+      const headers = await getAdminHeaders();
+
+      const invalidLoans = [
+        QA_IDS.loans.pending,
+        QA_IDS.loans.borrow0,
+        QA_IDS.loans.over1,
+        QA_IDS.loans.returnedOn,
+      ];
+
+      for (const loanId of invalidLoans) {
+        const res = await app.handle(
+          new Request(
+            `http://localhost/api/v1/admin/loans/${loanId}/return-confirmation`,
+            {
+              method: 'POST',
+              headers,
+            },
+          ),
+        );
+
+        expect(res.status).toBe(422);
+        const json = (await res.json()) as ApiErrorEnvelope;
+        expect(json.code).toBe('invalid_state_transition');
+      }
+    });
+
+    it('rejects with 403 on FINE_PENDING when fine is not yet paid (Belum Bayar, AC-09.04)', async () => {
+      const { app, getAdminHeaders } = createTestHarness();
+      const headers = await getAdminHeaders();
+
+      const res = await app.handle(
+        new Request(
+          `http://localhost/api/v1/admin/loans/${QA_IDS.loans.finePend}/return-confirmation`,
+          {
+            method: 'POST',
+            headers,
+          },
+        ),
+      );
+
+      expect(res.status).toBe(403);
+      const json = (await res.json()) as ApiErrorEnvelope;
+      expect(json.code).toBe('forbidden');
+      expect(json.message).toBe('Denda belum dibayar.');
+    });
+
+    it('successfully confirms return on RETURN_PENDING and increments book stock atomically (AC-09.03, Q-09)', async () => {
+      const { app, getAdminHeaders, loansRepository } = createTestHarness();
+      const headers = await getAdminHeaders();
+
+      const initialBook = loansRepository.getBook(QA_IDS.books.bookG);
+      const initialStock = initialBook?.availableCount ?? 0;
+
+      const res = await app.handle(
+        new Request(
+          `http://localhost/api/v1/admin/loans/${QA_IDS.loans.retPend}/return-confirmation`,
+          {
+            method: 'POST',
+            headers,
+          },
+        ),
+      );
+
+      expect(res.status).toBe(200);
+      const json = (await res.json()) as ReturnConfirmResponse;
+      expect(json.message).toBe(RETURN_CONFIRM_SUCCESS_MESSAGE);
+      expect(json.data.loan_id).toBe(QA_IDS.loans.retPend);
+      expect(json.data.status).toBe('RETURNED');
+      expect(json.data.status_label).toBe('Sudah Dikembalikan');
+
+      const loanRecord = await loansRepository.findLoanRecordById(
+        QA_IDS.loans.retPend,
+      );
+      expect(loanRecord?.status).toBe('RETURNED');
+      expect(loanRecord?.returnedAt).not.toBeNull();
+
+      const updatedBook = loansRepository.getBook(QA_IDS.books.bookG);
+      expect(updatedBook?.availableCount).toBe(initialStock + 1);
+
+      const events = loansRepository.getLoanEvents(QA_IDS.loans.retPend);
+      const confirmEvent = events.find((e) => e.toStatus === 'RETURNED');
+      expect(confirmEvent).toBeDefined();
+      expect(confirmEvent?.fromStatus).toBe('RETURN_PENDING');
+      expect(confirmEvent?.actorId).toBe(QA_IDS.users.admin);
+    });
+
+    it('successfully confirms return on FINE_PENDING with Sudah Bayar and increments stock (AC-09.05, Q-09)', async () => {
+      const { app, getAdminHeaders, loansRepository } = createTestHarness();
+      const headers = await getAdminHeaders();
+
+      const initialBook = loansRepository.getBook(QA_IDS.books.bookI);
+      const initialStock = initialBook?.availableCount ?? 0;
+
+      const res = await app.handle(
+        new Request(
+          `http://localhost/api/v1/admin/loans/${QA_IDS.loans.finePaid}/return-confirmation`,
+          {
+            method: 'POST',
+            headers,
+          },
+        ),
+      );
+
+      expect(res.status).toBe(200);
+      const json = (await res.json()) as ReturnConfirmResponse;
+      expect(json.message).toBe(RETURN_CONFIRM_SUCCESS_MESSAGE);
+      expect(json.data.loan_id).toBe(QA_IDS.loans.finePaid);
+      expect(json.data.status).toBe('RETURNED');
+      expect(json.data.status_label).toBe('Sudah Dikembalikan');
+
+      const loanRecord = await loansRepository.findLoanRecordById(
+        QA_IDS.loans.finePaid,
+      );
+      expect(loanRecord?.status).toBe('RETURNED');
+      expect(loanRecord?.returnedAt).not.toBeNull();
+
+      const updatedBook = loansRepository.getBook(QA_IDS.books.bookI);
+      expect(updatedBook?.availableCount).toBe(initialStock + 1);
+
+      const events = loansRepository.getLoanEvents(QA_IDS.loans.finePaid);
+      const confirmEvent = events.find((e) => e.toStatus === 'RETURNED');
+      expect(confirmEvent).toBeDefined();
+      expect(confirmEvent?.fromStatus).toBe('FINE_PENDING');
+      expect(confirmEvent?.actorId).toBe(QA_IDS.users.admin);
+    });
+
+    it('rejects double return confirmation with 422 invalid_state_transition', async () => {
+      const { app, getAdminHeaders } = createTestHarness();
+      const headers = await getAdminHeaders();
+
+      const firstRes = await app.handle(
+        new Request(
+          `http://localhost/api/v1/admin/loans/${QA_IDS.loans.retPend}/return-confirmation`,
+          {
+            method: 'POST',
+            headers,
+          },
+        ),
+      );
+      expect(firstRes.status).toBe(200);
+
+      const secondRes = await app.handle(
+        new Request(
+          `http://localhost/api/v1/admin/loans/${QA_IDS.loans.retPend}/return-confirmation`,
+          {
+            method: 'POST',
+            headers,
+          },
+        ),
+      );
+      expect(secondRes.status).toBe(422);
+      const json = (await secondRes.json()) as ApiErrorEnvelope;
+      expect(json.code).toBe('invalid_state_transition');
     });
   });
 });

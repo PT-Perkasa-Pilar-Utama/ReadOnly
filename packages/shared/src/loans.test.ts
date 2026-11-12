@@ -7,6 +7,10 @@ import {
   computeFineAmount,
   createLoanInputSchema,
   createLoanResponseDataSchema,
+  FINE_PAYMENT_SUCCESS_MESSAGE,
+  FINE_REQUIRED_MESSAGE,
+  finePaymentInputSchema,
+  finePaymentResponseSchema,
   LOAN_STATUSES,
   loanQrResponseDataSchema,
   MEMBER_ACTIONS,
@@ -15,6 +19,12 @@ import {
   qrConfirmResponseSchema,
   qrPreviewResponseSchema,
   qrTokenInputSchema,
+  RATING_REQUIRED_MESSAGE,
+  RETURN_CONFIRM_SUCCESS_MESSAGE,
+  RETURN_SUCCESS_MESSAGE,
+  returnConfirmResponseSchema,
+  returnLoanInputSchema,
+  returnLoanResponseSchema,
   STATUS_MEMBER_ACTION_MAP,
 } from './loans';
 
@@ -247,5 +257,99 @@ describe('shared loans schemas & contracts (BE-S2-02 & BE-S3-01)', () => {
     };
 
     expect(qrConfirmResponseSchema.parse(validConfirm)).toEqual(validConfirm);
+  });
+
+  it('validates returnLoanInputSchema and enforces rating 1-5 mandatory (AC-09.06)', () => {
+    for (const validScore of [1, 2, 3, 4, 5]) {
+      const res = returnLoanInputSchema.safeParse({ score: validScore });
+      expect(res.success).toBe(true);
+    }
+
+    const invalidCases = [
+      {},
+      { score: undefined },
+      { score: null },
+      { score: 0 },
+      { score: 6 },
+      { score: 3.5 },
+      { score: '5' },
+      { score: -1 },
+    ];
+
+    for (const bad of invalidCases) {
+      const res = returnLoanInputSchema.safeParse(bad);
+      expect(res.success).toBe(false);
+      if (!res.success) {
+        expect(res.error.issues[0]?.message).toBe(RATING_REQUIRED_MESSAGE);
+      }
+    }
+  });
+
+  it('validates returnLoanResponseSchema', () => {
+    const validResponse = {
+      data: {
+        loan_id: '00000000-0000-4000-8003-000000000001',
+        status: 'RETURN_PENDING' as const,
+        status_label: 'Pending Pengembalian',
+      },
+      message: RETURN_SUCCESS_MESSAGE,
+    };
+
+    expect(returnLoanResponseSchema.parse(validResponse)).toEqual(
+      validResponse,
+    );
+  });
+
+  it('validates finePaymentInputSchema and enforces number validation (AC-09.09)', () => {
+    expect(finePaymentInputSchema.safeParse({}).success).toBe(true);
+    expect(finePaymentInputSchema.safeParse({ amount: 2000 }).success).toBe(
+      true,
+    );
+    expect(
+      finePaymentInputSchema.safeParse({ amount: 99_999_999 }).success,
+    ).toBe(true);
+
+    const invalidCases = [
+      { amount: '2000' },
+      { amount: 0 },
+      { amount: -500 },
+      { amount: 1.5 },
+      { amount: 100_000_000 },
+      { amount: null },
+    ];
+
+    for (const bad of invalidCases) {
+      const res = finePaymentInputSchema.safeParse(bad);
+      expect(res.success).toBe(false);
+      if (!res.success) {
+        expect(res.error.issues[0]?.message).toBe(FINE_REQUIRED_MESSAGE);
+      }
+    }
+  });
+
+  it('validates finePaymentResponseSchema', () => {
+    const valid = {
+      data: {
+        loan_id: '00000000-0000-4000-8003-000000000001',
+        fine_amount: 2000,
+        fine_status: 'Sudah Bayar' as const,
+      },
+      message: FINE_PAYMENT_SUCCESS_MESSAGE,
+    };
+
+    expect(finePaymentResponseSchema.parse(valid)).toEqual(valid);
+  });
+
+  it('validates returnConfirmResponseSchema', () => {
+    const valid = {
+      data: {
+        loan_id: '00000000-0000-4000-8003-000000000001',
+        status: 'RETURNED' as const,
+        status_label: 'Sudah Dikembalikan' as const,
+      },
+      message: RETURN_CONFIRM_SUCCESS_MESSAGE,
+    };
+
+    expect(returnConfirmResponseSchema.parse(valid)).toEqual(valid);
   });
 });

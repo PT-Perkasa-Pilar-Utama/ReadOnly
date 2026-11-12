@@ -3,11 +3,14 @@ import { type PaginatedResponse, paginationSchema } from './api';
 import { UUID_REGEX } from './auth';
 import {
   calculateFine,
+  FINE_MANUAL_MAX,
   FINE_STATUSES,
   type FineStatus,
   LOAN_STATUS_LABELS,
   LOAN_STATUSES,
   type LoanStatus,
+  RATING_MAX_SCORE,
+  RATING_MIN_SCORE,
 } from './constants';
 
 export {
@@ -272,3 +275,83 @@ export const qrConfirmResponseSchema = z.object({
 });
 
 export type QrConfirmResponse = z.infer<typeof qrConfirmResponseSchema>;
+
+export const RATING_REQUIRED_MESSAGE = 'Rating wajib diisi';
+export const RETURN_SUCCESS_MESSAGE = 'Pengembalian diajukan';
+
+export const returnLoanInputSchema = z.object({
+  score: z
+    .number({ message: RATING_REQUIRED_MESSAGE })
+    .int({ message: RATING_REQUIRED_MESSAGE })
+    .min(RATING_MIN_SCORE, { message: RATING_REQUIRED_MESSAGE })
+    .max(RATING_MAX_SCORE, { message: RATING_REQUIRED_MESSAGE }),
+});
+
+export type ReturnLoanInput = z.infer<typeof returnLoanInputSchema>;
+
+export const returnLoanResponseDataSchema = z.object({
+  loan_id: z.string().regex(UUID_REGEX),
+  status: z.enum(['RETURN_PENDING', 'FINE_PENDING']),
+  status_label: z.string(),
+});
+
+export type ReturnLoanResponseData = z.infer<
+  typeof returnLoanResponseDataSchema
+>;
+
+export const returnLoanResponseSchema = z.object({
+  data: returnLoanResponseDataSchema,
+  message: z.string(),
+});
+
+export type ReturnLoanResponse = z.infer<typeof returnLoanResponseSchema>;
+
+export const FINE_REQUIRED_MESSAGE = 'Biaya denda wajib diisi dengan angka';
+export const FINE_PAYMENT_SUCCESS_MESSAGE = 'Denda Berhasil Dibayar';
+
+export const finePaymentInputSchema = z.object({
+  amount: z
+    .number({ message: FINE_REQUIRED_MESSAGE })
+    .int({ message: FINE_REQUIRED_MESSAGE })
+    .min(1, { message: FINE_REQUIRED_MESSAGE })
+    .max(FINE_MANUAL_MAX, { message: FINE_REQUIRED_MESSAGE })
+    .optional(),
+});
+
+export type FinePaymentInput = z.infer<typeof finePaymentInputSchema>;
+
+export const finePaymentResponseDataSchema = z.object({
+  loan_id: z.string().regex(UUID_REGEX),
+  fine_amount: z.number().int().nonnegative(),
+  fine_status: z.literal('Sudah Bayar'),
+});
+
+export type FinePaymentResponseData = z.infer<
+  typeof finePaymentResponseDataSchema
+>;
+
+export const finePaymentResponseSchema = z.object({
+  data: finePaymentResponseDataSchema,
+  message: z.string(),
+});
+
+export type FinePaymentResponse = z.infer<typeof finePaymentResponseSchema>;
+
+export const RETURN_CONFIRM_SUCCESS_MESSAGE = 'Buku berhasil Dikembalikan';
+
+export const returnConfirmResponseDataSchema = z.object({
+  loan_id: z.string().regex(UUID_REGEX),
+  status: z.literal('RETURNED'),
+  status_label: z.literal('Sudah Dikembalikan'),
+});
+
+export type ReturnConfirmResponseData = z.infer<
+  typeof returnConfirmResponseDataSchema
+>;
+
+export const returnConfirmResponseSchema = z.object({
+  data: returnConfirmResponseDataSchema,
+  message: z.string(),
+});
+
+export type ReturnConfirmResponse = z.infer<typeof returnConfirmResponseSchema>;

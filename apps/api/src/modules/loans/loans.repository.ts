@@ -9,6 +9,7 @@ import {
   notifications,
   QA_IDS,
   QA_PENDING_QR_TOKEN,
+  ratings,
   sha256Hex,
   users,
 } from '@readonly/db';
@@ -39,7 +40,10 @@ import {
 } from 'drizzle-orm';
 import {
   createConflictError,
+  createForbiddenError,
+  createInvalidStateTransitionError,
   createInvalidTokenError,
+  createNotFoundError,
 } from '../../shared/errors';
 
 export interface LoanBookRecord {
@@ -91,6 +95,11 @@ export interface LoanRecord {
   requestedAt: Date;
   confirmedAt: Date | null;
   dueDate: string | null;
+  returnRequestedAt: Date | null;
+  returnedAt: Date | null;
+  lateDays: number;
+  fineAmount: number | null;
+  fineStatus: FineStatus;
   qrTokenHash: string | null;
   qrConsumedAt: Date | null;
 }
@@ -203,6 +212,39 @@ export interface ConfirmPendingLoanResult {
   dueDate: string;
 }
 
+export interface ReturnLoanOnTimeParams {
+  loanId: string;
+  bookId: string;
+  userId: string;
+  score: number;
+  now: Date;
+}
+
+export interface ReturnLoanOverdueParams {
+  loanId: string;
+  bookId: string;
+  userId: string;
+  score: number;
+  lateDays: number;
+  fineAmount: number | null;
+  now: Date;
+}
+
+export interface PayFineParams {
+  loanId: string;
+  adminId: string;
+  fineAmount: number;
+  now: Date;
+}
+
+export interface ConfirmReturnParams {
+  loanId: string;
+  bookId: string;
+  adminId: string;
+  previousStatus: 'RETURN_PENDING' | 'FINE_PENDING';
+  now: Date;
+}
+
 export interface LoansRepository {
   findBookById(bookId: string): Promise<LoanBookRecord | null>;
   generateLoanNo(date: Date): Promise<string>;
@@ -222,6 +264,10 @@ export interface LoansRepository {
   confirmPendingLoan(
     params: ConfirmPendingLoanParams,
   ): Promise<ConfirmPendingLoanResult>;
+  returnLoanOnTime(params: ReturnLoanOnTimeParams): Promise<void>;
+  returnLoanOverdue(params: ReturnLoanOverdueParams): Promise<void>;
+  payFine(params: PayFineParams): Promise<void>;
+  confirmReturn(params: ConfirmReturnParams): Promise<void>;
 }
 
 export class DrizzleLoansRepository implements LoansRepository {
@@ -348,6 +394,11 @@ export class DrizzleLoansRepository implements LoansRepository {
         requestedAt: loans.requestedAt,
         confirmedAt: loans.confirmedAt,
         dueDate: loans.dueDate,
+        returnRequestedAt: loans.returnRequestedAt,
+        returnedAt: loans.returnedAt,
+        lateDays: loans.lateDays,
+        fineAmount: loans.fineAmount,
+        fineStatus: loans.fineStatus,
         qrTokenHash: loans.qrTokenHash,
         qrConsumedAt: loans.qrConsumedAt,
       })
@@ -712,6 +763,263 @@ export class DrizzleLoansRepository implements LoansRepository {
       };
     });
   }
+
+  async returnLoanOnTime(params: ReturnLoanOnTimeParams): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      const [loanRow] = await tx
+        .select({
+          id: loans.id,
+          bookId: loans.bookId,
+          userId: loans.userId,
+          status: loans.status,
+        })
+        .from(loans)
+        .where(eq(loans.id, params.loanId))
+        .for('update');
+
+      if (!loanRow) {
+        throw createNotFoundError('Peminjaman tidak ditemukan.');
+      }
+
+      if (loanRow.status !== 'BORROWED') {
+        throw createInvalidStateTransitionError(
+          'Peminjaman bukan berstatus Sedang Dipinjam.',
+        );
+      }
+
+      const [updatedLoan] = await tx
+        .update(loans)
+        .set({
+          status: 'RETURN_PENDING',
+          returnRequestedAt: params.now,
+          lateDays: 0,
+          fineAmount: 0,
+        })
+        .where(and(eq(loans.id, params.loanId), eq(loans.status, 'BORROWED')))
+        .returning({ id: loans.id });
+
+      if (!updatedLoan) {
+        throw createInvalidStateTransitionError(
+          'Peminjaman bukan berstatus Sedang Dipinjam.',
+        );
+      }
+
+      await tx.insert(ratings).values({
+        loanId: params.loanId,
+        bookId: params.bookId,
+        userId: params.userId,
+        score: params.score,
+        createdAt: params.now,
+      });
+
+      const actorId =
+        params.userId && UUID_REGEX.test(params.userId) ? params.userId : null;
+
+      await tx.insert(loanEvents).values({
+        loanId: params.loanId,
+        fromStatus: 'BORROWED',
+        toStatus: 'RETURN_PENDING',
+        actorId,
+        createdAt: params.now,
+      });
+    });
+  }
+
+  async returnLoanOverdue(params: ReturnLoanOverdueParams): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      const [loanRow] = await tx
+        .select({
+          id: loans.id,
+          bookId: loans.bookId,
+          userId: loans.userId,
+          status: loans.status,
+        })
+        .from(loans)
+        .where(eq(loans.id, params.loanId))
+        .for('update');
+
+      if (!loanRow) {
+        throw createNotFoundError('Peminjaman tidak ditemukan.');
+      }
+
+      if (loanRow.status !== 'OVERDUE') {
+        throw createInvalidStateTransitionError(
+          'Peminjaman bukan berstatus Terlambat.',
+        );
+      }
+
+      const [updatedLoan] = await tx
+        .update(loans)
+        .set({
+          status: 'FINE_PENDING',
+          returnRequestedAt: params.now,
+          lateDays: params.lateDays,
+          fineAmount: params.fineAmount,
+          fineStatus: 'Belum Bayar',
+        })
+        .where(and(eq(loans.id, params.loanId), eq(loans.status, 'OVERDUE')))
+        .returning({ id: loans.id });
+
+      if (!updatedLoan) {
+        throw createInvalidStateTransitionError(
+          'Peminjaman bukan berstatus Terlambat.',
+        );
+      }
+
+      await tx.insert(ratings).values({
+        loanId: params.loanId,
+        bookId: params.bookId,
+        userId: params.userId,
+        score: params.score,
+        createdAt: params.now,
+      });
+
+      const actorId =
+        params.userId && UUID_REGEX.test(params.userId) ? params.userId : null;
+
+      await tx.insert(loanEvents).values({
+        loanId: params.loanId,
+        fromStatus: 'OVERDUE',
+        toStatus: 'FINE_PENDING',
+        actorId,
+        createdAt: params.now,
+      });
+    });
+  }
+
+  async payFine(params: PayFineParams): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      const [loanRow] = await tx
+        .select({
+          id: loans.id,
+          status: loans.status,
+          fineStatus: loans.fineStatus,
+        })
+        .from(loans)
+        .where(eq(loans.id, params.loanId))
+        .for('update');
+
+      if (!loanRow) {
+        throw createNotFoundError('Peminjaman tidak ditemukan.');
+      }
+
+      if (
+        loanRow.status !== 'FINE_PENDING' ||
+        loanRow.fineStatus !== 'Belum Bayar'
+      ) {
+        throw createInvalidStateTransitionError(
+          'Peminjaman bukan berstatus Pending Keterlambatan atau denda sudah dibayar.',
+        );
+      }
+
+      const actorId =
+        params.adminId && UUID_REGEX.test(params.adminId)
+          ? params.adminId
+          : null;
+
+      const [updatedLoan] = await tx
+        .update(loans)
+        .set({
+          fineAmount: params.fineAmount,
+          fineStatus: 'Sudah Bayar',
+          finePaidAt: params.now,
+          finePaidBy: actorId,
+        })
+        .where(
+          and(
+            eq(loans.id, params.loanId),
+            eq(loans.status, 'FINE_PENDING'),
+            eq(loans.fineStatus, 'Belum Bayar'),
+          ),
+        )
+        .returning({ id: loans.id });
+
+      if (!updatedLoan) {
+        throw createInvalidStateTransitionError(
+          'Peminjaman bukan berstatus Pending Keterlambatan atau denda sudah dibayar.',
+        );
+      }
+
+      await tx.insert(loanEvents).values({
+        loanId: params.loanId,
+        fromStatus: 'FINE_PENDING',
+        toStatus: 'FINE_PENDING',
+        actorId,
+        createdAt: params.now,
+      });
+    });
+  }
+
+  async confirmReturn(params: ConfirmReturnParams): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      const [loanRow] = await tx
+        .select({
+          id: loans.id,
+          bookId: loans.bookId,
+          status: loans.status,
+          fineStatus: loans.fineStatus,
+        })
+        .from(loans)
+        .where(eq(loans.id, params.loanId))
+        .for('update');
+
+      if (!loanRow) {
+        throw createNotFoundError('Peminjaman tidak ditemukan.');
+      }
+
+      if (loanRow.status !== params.previousStatus) {
+        throw createInvalidStateTransitionError(
+          'Peminjaman tidak dapat dikonfirmasi pengembaliannya.',
+        );
+      }
+
+      if (
+        loanRow.status === 'FINE_PENDING' &&
+        loanRow.fineStatus !== 'Sudah Bayar'
+      ) {
+        throw createForbiddenError('Denda belum dibayar.');
+      }
+
+      const actorId =
+        params.adminId && UUID_REGEX.test(params.adminId)
+          ? params.adminId
+          : null;
+
+      const [updatedLoan] = await tx
+        .update(loans)
+        .set({
+          status: 'RETURNED',
+          returnedAt: params.now,
+          returnConfirmedBy: actorId,
+        })
+        .where(
+          and(
+            eq(loans.id, params.loanId),
+            eq(loans.status, params.previousStatus),
+          ),
+        )
+        .returning({ id: loans.id });
+
+      if (!updatedLoan) {
+        throw createInvalidStateTransitionError(
+          'Peminjaman tidak dapat dikonfirmasi pengembaliannya.',
+        );
+      }
+
+      await tx
+        .update(books)
+        .set({ availableCount: sql`${books.availableCount} + 1` })
+        .where(eq(books.id, loanRow.bookId));
+
+      await tx.insert(loanEvents).values({
+        loanId: params.loanId,
+        fromStatus: params.previousStatus,
+        toStatus: 'RETURNED',
+        actorId,
+        createdAt: params.now,
+      });
+    });
+  }
 }
 
 export interface InMemoryBook {
@@ -748,6 +1056,9 @@ export interface InMemoryLoan {
   lateDays: number;
   fineAmount: number | null;
   fineStatus: FineStatus;
+  finePaidAt?: Date | null;
+  finePaidBy?: string | null;
+  returnConfirmedBy?: string | null;
   qrTokenHash?: string | null;
   qrConsumedAt?: Date | null;
 }
@@ -772,11 +1083,21 @@ export interface InMemoryNotification {
   createdAt: Date;
 }
 
+export interface InMemoryRating {
+  id: string;
+  loanId: string;
+  bookId: string;
+  userId: string;
+  score: number;
+  createdAt: Date;
+}
+
 export class InMemoryLoansRepository implements LoansRepository {
   private readonly users = new Map<string, InMemoryUser>();
   private readonly books = new Map<string, InMemoryBook>();
   private readonly loans: InMemoryLoan[] = [];
   private readonly loanEvents: InMemoryLoanEvent[] = [];
+  private readonly ratings: InMemoryRating[] = [];
   private readonly notifications: InMemoryNotification[] = [];
 
   constructor() {
@@ -1280,6 +1601,11 @@ export class InMemoryLoansRepository implements LoansRepository {
       requestedAt: loan.requestedAt,
       confirmedAt: loan.confirmedAt,
       dueDate: loan.dueDate,
+      returnRequestedAt: loan.returnRequestedAt,
+      returnedAt: loan.returnedAt,
+      lateDays: loan.lateDays,
+      fineAmount: loan.fineAmount,
+      fineStatus: loan.fineStatus,
       qrTokenHash: loan.qrTokenHash ?? null,
       qrConsumedAt: loan.qrConsumedAt ?? null,
     };
@@ -1572,5 +1898,163 @@ export class InMemoryLoansRepository implements LoansRepository {
 
   getBook(bookId: string): InMemoryBook | undefined {
     return this.books.get(bookId);
+  }
+
+  async returnLoanOnTime(params: ReturnLoanOnTimeParams): Promise<void> {
+    const loan = this.loans.find((item) => item.id === params.loanId);
+    if (!loan) {
+      throw createNotFoundError('Peminjaman tidak ditemukan.');
+    }
+
+    if (loan.status !== 'BORROWED') {
+      throw createInvalidStateTransitionError(
+        'Peminjaman bukan berstatus Sedang Dipinjam.',
+      );
+    }
+
+    loan.status = 'RETURN_PENDING';
+    loan.returnRequestedAt = params.now;
+    loan.lateDays = 0;
+    loan.fineAmount = 0;
+
+    this.ratings.push({
+      id: crypto.randomUUID(),
+      loanId: params.loanId,
+      bookId: params.bookId,
+      userId: params.userId,
+      score: params.score,
+      createdAt: params.now,
+    });
+
+    const actorId =
+      params.userId && UUID_REGEX.test(params.userId) ? params.userId : null;
+
+    this.loanEvents.push({
+      id: crypto.randomUUID(),
+      loanId: params.loanId,
+      fromStatus: 'BORROWED',
+      toStatus: 'RETURN_PENDING',
+      actorId,
+      createdAt: params.now,
+    });
+  }
+
+  async returnLoanOverdue(params: ReturnLoanOverdueParams): Promise<void> {
+    const loan = this.loans.find((item) => item.id === params.loanId);
+    if (!loan) {
+      throw createNotFoundError('Peminjaman tidak ditemukan.');
+    }
+
+    if (loan.status !== 'OVERDUE') {
+      throw createInvalidStateTransitionError(
+        'Peminjaman bukan berstatus Terlambat.',
+      );
+    }
+
+    loan.status = 'FINE_PENDING';
+    loan.returnRequestedAt = params.now;
+    loan.lateDays = params.lateDays;
+    loan.fineAmount = params.fineAmount;
+    loan.fineStatus = 'Belum Bayar';
+
+    this.ratings.push({
+      id: crypto.randomUUID(),
+      loanId: params.loanId,
+      bookId: params.bookId,
+      userId: params.userId,
+      score: params.score,
+      createdAt: params.now,
+    });
+
+    const actorId =
+      params.userId && UUID_REGEX.test(params.userId) ? params.userId : null;
+
+    this.loanEvents.push({
+      id: crypto.randomUUID(),
+      loanId: params.loanId,
+      fromStatus: 'OVERDUE',
+      toStatus: 'FINE_PENDING',
+      actorId,
+      createdAt: params.now,
+    });
+  }
+
+  async payFine(params: PayFineParams): Promise<void> {
+    const loan = this.loans.find((item) => item.id === params.loanId);
+    if (!loan) {
+      throw createNotFoundError('Peminjaman tidak ditemukan.');
+    }
+
+    if (loan.status !== 'FINE_PENDING' || loan.fineStatus !== 'Belum Bayar') {
+      throw createInvalidStateTransitionError(
+        'Peminjaman bukan berstatus Pending Keterlambatan atau denda sudah dibayar.',
+      );
+    }
+
+    loan.fineAmount = params.fineAmount;
+    loan.fineStatus = 'Sudah Bayar';
+    loan.finePaidAt = params.now;
+    loan.finePaidBy = params.adminId;
+
+    const actorId =
+      params.adminId && UUID_REGEX.test(params.adminId) ? params.adminId : null;
+
+    this.loanEvents.push({
+      id: crypto.randomUUID(),
+      loanId: params.loanId,
+      fromStatus: 'FINE_PENDING',
+      toStatus: 'FINE_PENDING',
+      actorId,
+      createdAt: params.now,
+    });
+  }
+
+  async confirmReturn(params: ConfirmReturnParams): Promise<void> {
+    const loan = this.loans.find((item) => item.id === params.loanId);
+    if (!loan) {
+      throw createNotFoundError('Peminjaman tidak ditemukan.');
+    }
+
+    if (loan.status !== params.previousStatus) {
+      throw createInvalidStateTransitionError(
+        'Peminjaman tidak dapat dikonfirmasi pengembaliannya.',
+      );
+    }
+
+    if (loan.status === 'FINE_PENDING' && loan.fineStatus !== 'Sudah Bayar') {
+      throw createForbiddenError('Denda belum dibayar.');
+    }
+
+    loan.status = 'RETURNED';
+    loan.returnedAt = params.now;
+    loan.returnConfirmedBy = params.adminId;
+
+    const book = this.books.get(params.bookId);
+    if (book) {
+      book.availableCount += 1;
+    }
+
+    const actorId =
+      params.adminId && UUID_REGEX.test(params.adminId) ? params.adminId : null;
+
+    this.loanEvents.push({
+      id: crypto.randomUUID(),
+      loanId: params.loanId,
+      fromStatus: params.previousStatus,
+      toStatus: 'RETURNED',
+      actorId,
+      createdAt: params.now,
+    });
+  }
+
+  getRatings(loanId?: string): InMemoryRating[] {
+    if (loanId) {
+      return this.ratings.filter((r) => r.loanId === loanId);
+    }
+    return [...this.ratings];
+  }
+
+  getLoan(loanId: string): InMemoryLoan | undefined {
+    return this.loans.find((l) => l.id === loanId);
   }
 }
