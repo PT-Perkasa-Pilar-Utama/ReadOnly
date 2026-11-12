@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/solid-router';
-import { createSignal, Show } from 'solid-js';
+import { createEffect, createSignal, on, Show } from 'solid-js';
 import type { Book } from '../api/contracts';
 import Icon from './Icon';
 
@@ -9,6 +9,8 @@ export function BookCover(props: {
   class?: string;
 }) {
   const [failed, setFailed] = createSignal(false);
+  // AC-07.01, AC-07.04: a retained card must retry when its cover URL changes.
+  createEffect(on(() => props.src, () => setFailed(false)));
   return (
     <div class={`book-cover ${props.class ?? ''}`}>
       <Show
