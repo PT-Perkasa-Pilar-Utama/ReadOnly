@@ -471,7 +471,7 @@ export function DashboardPage() {
             <input
               id="manual-loan-token"
               class="dashboard-manual-input"
-              type="password"
+              type="text"
               value={manualToken()}
               onInput={(event) => setManualToken(event.currentTarget.value)}
               autocomplete="off"
