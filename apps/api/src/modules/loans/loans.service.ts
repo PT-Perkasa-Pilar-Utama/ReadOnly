@@ -85,6 +85,10 @@ export interface LoansServiceOptions {
   clock?: ClockPort;
 }
 
+const MANUAL_CODE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
+const MANUAL_CODE_LENGTH = 6;
+const MANUAL_CODE_INPUT_REGEX = /^pjm-[a-z0-9]{6}$/i;
+
 export function generateQrToken(): { token: string; hash: string } {
   const bytes = crypto.randomBytes(16);
   const token = bytes.toString('base64url');
@@ -92,8 +96,32 @@ export function generateQrToken(): { token: string; hash: string } {
   return { token, hash };
 }
 
+export function generateManualCode(): { code: string; hash: string } {
+  let suffix = '';
+  for (let i = 0; i < MANUAL_CODE_LENGTH; i += 1) {
+    const idx = crypto.randomInt(0, MANUAL_CODE_ALPHABET.length);
+    suffix += MANUAL_CODE_ALPHABET[idx];
+  }
+  const code = `PJM-${suffix}`;
+  return { code, hash: hashQrToken(code) };
+}
+
 export function hashQrToken(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+function resolveVerificationTokenHash(rawInput: string): string {
+  if (typeof rawInput !== 'string') {
+    throw createInvalidTokenError('QR Code tidak valid');
+  }
+  const trimmed = rawInput.trim();
+  if (trimmed.length === 0) {
+    throw createInvalidTokenError('QR Code tidak valid');
+  }
+  const normalized = MANUAL_CODE_INPUT_REGEX.test(trimmed)
+    ? trimmed.toUpperCase()
+    : trimmed;
+  return sha256Hex(normalized);
 }
 
 export class LoansService {
@@ -132,7 +160,8 @@ export class LoansService {
       throw createConflictError(LOAN_MESSAGES.OUT_OF_STOCK);
     }
 
-    const { hash } = generateQrToken();
+    const { hash: qrTokenHash } = generateQrToken();
+    const { hash: manualCodeHash } = generateManualCode();
     const loanNo = await this.repository.generateLoanNo(this.clock.now());
 
     const created = await this.repository.createLoan({
@@ -141,7 +170,8 @@ export class LoansService {
       bookId: input.book_id,
       status: 'PENDING',
       requestedAt: this.clock.now(),
-      qrTokenHash: hash,
+      qrTokenHash,
+      manualCodeHash,
     });
 
     return {
@@ -206,14 +236,20 @@ export class LoansService {
       throw createInvalidStateTransitionError(LOAN_MESSAGES.INVALID_STATE);
     }
 
-    const { token, hash } = generateQrToken();
-    await this.repository.updateQrTokenHash(loan.id, hash);
+    const { token, hash: qrTokenHash } = generateQrToken();
+    const { code: manualCode, hash: manualCodeHash } = generateManualCode();
+    await this.repository.updateQrTokenHash(
+      loan.id,
+      qrTokenHash,
+      manualCodeHash,
+    );
 
     return {
       data: {
         loan_id: loan.id,
         loan_no: loan.loanNo,
         qr_token: token,
+        manual_code: manualCode,
       },
     };
   }
@@ -519,11 +555,7 @@ export class LoansService {
   async previewQrLoan(
     qrToken: string,
   ): Promise<ApiSuccessEnvelope<QrPreviewData>> {
-    if (typeof qrToken !== 'string' || qrToken.trim().length === 0) {
-      throw createInvalidTokenError('QR Code tidak valid');
-    }
-
-    const tokenHash = sha256Hex(qrToken.trim());
+    const tokenHash = resolveVerificationTokenHash(qrToken);
     const record = await this.repository.findPendingLoanByQrHash(tokenHash);
     if (!record) {
       throw createInvalidTokenError('QR Code tidak valid');
@@ -557,11 +589,7 @@ export class LoansService {
     qrToken: string,
     adminId?: string,
   ): Promise<ApiSuccessEnvelope<QrConfirmData>> {
-    if (typeof qrToken !== 'string' || qrToken.trim().length === 0) {
-      throw createInvalidTokenError('QR Code tidak valid');
-    }
-
-    const tokenHash = sha256Hex(qrToken.trim());
+    const tokenHash = resolveVerificationTokenHash(qrToken);
     const preview = await this.repository.findPendingLoanByQrHash(tokenHash);
     if (!preview) {
       throw createInvalidTokenError('QR Code tidak valid');

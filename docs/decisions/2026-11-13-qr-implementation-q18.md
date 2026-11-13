@@ -65,8 +65,8 @@ Pemindaian QR oleh Admin Perpus wajib mengikuti alur dua langkah untuk mencegah 
 ### A. Modal QR Member (`apps/web/src/pages/MyLoans`)
 1. **Header Item:** Menampilkan Cover, Judul, Penulis, dan status badge `Pending Peminjaman`.
 2. **Visual QR:** Canvas/SVG QR beresolusi jelas dengan padding putih yang cukup untuk keterbacaan pemindai.
-3. **Kerahasiaan Token:** Token acak 128-bit **tidak boleh ditampilkan sebagai teks**. Yang ditampilkan di bawah QR hanya nomor referensi peminjaman (misal: `No. Pinjaman: PJ-001`).
-4. **Helper Copy:** *"Tunjukkan kode QR ini kepada Admin untuk konfirmasi peminjaman."*
+3. **Kerahasiaan Token & Kode Manual:** Token QR acak 128-bit **tidak boleh ditampilkan sebagai teks**; kode konfirmasi manual satu kali (`PJM-XXXXXX`, disimpan sebagai SHA-256 hash di `manual_code_hash`) ditampilkan di bawah `No. Pinjaman: ...` sebagai fallback apabila pemindai kamera Admin bermasalah.
+4. **Helper Copy:** *"Tunjukkan kode QR ini kepada Admin untuk konfirmasi peminjaman, atau sebutkan kode konfirmasi manual jika pemindai tidak tersedia."*
 
 ### B. Modal Scanner Admin (`apps/web/src/pages/Dashboard`)
 1. **Viewfinder:** Area kamera berbingkai persegi dengan sudut reticle (*corner brackets*) dan garis pemindai horizontal (*scan line*).
@@ -86,7 +86,7 @@ Pemindaian QR oleh Admin Perpus wajib mengikuti alur dua langkah untuk mencegah 
 
 ## 4. Keamanan & Kebijakan Data (Q-18)
 
-- **One-Time Token:** Token QR bersifat sekali pakai. Setelah Admin menekan "Konfirmasi Peminjaman", token di-invalidate di server (`qr_token_hash` dihapus atau ditandai `consumed`).
+- **One-Time Token & Manual OTP:** Token QR dan kode konfirmasi manual bersifat sekali pakai dan ikut dirotasi saat `GET /loans/:id/qr` dipanggil. Setelah Admin menekan "Konfirmasi Peminjaman", kedua hash di-invalidate di server (`qr_token_hash = NULL`, `manual_code_hash = NULL`, dan `qr_consumed_at` diisi).
 - **No Log Leak:** String `qr_token` tidak boleh ditulis ke dalam log sistem maupun konsol browser (SEC-10).
 
 ---

@@ -108,7 +108,8 @@ erDiagram
 | fine_paid_at | timestamptz | yes | | | |
 | fine_paid_by | uuid | yes | | FK → users | Admin |
 | qr_token_hash | text | yes | | | SHA-256 hash dari token 128-bit CSPRNG |
-| qr_consumed_at | timestamptz | yes | | | ditandai saat token QR dikonfirmasi (sekali pakai) |
+| manual_code_hash | text | yes | | | SHA-256 hash dari kode konfirmasi manual (`PJM-XXXXXX`, fallback tanpa kamera, sekali pakai) |
+| qr_consumed_at | timestamptz | yes | | | ditandai saat token QR atau kode manual dikonfirmasi (sekali pakai) |
 
 ### loan_events (append-only)
 

@@ -24,10 +24,11 @@ Desain token QR dan alur scan (Q-18). Detail keputusan pustaka dan UX mengacu pa
 
 ## Spesifikasi token
 
-- Entropi: minimal 128 bit acak kriptografis (crypto.getRandomValues).
-- Penyimpanan: SHA-256 hash di `loans.qr_token_hash`; token plaintext hanya di memori sesi request.
-- Sekali pakai: konsumsi menghapus hash / menandai `qr_consumed_at`.
-- Keterikatan: satu token = satu peminjaman.
+- Entropi QR: minimal 128 bit acak kriptografis (`crypto.randomBytes(16)`).
+- Kode Konfirmasi Manual (fallback tanpa kamera): format `PJM-XXXXXX` (6 karakter acak dari alfabet unambiguous `23456789ABCDEFGHJKMNPQRSTUVWXYZ`, tanpa `0/O/1/I/L`), dirotasi bersama `qr_token` pada `GET /loans/:id/qr`.
+- Penyimpanan: SHA-256 hash di `loans.qr_token_hash` dan `loans.manual_code_hash`; plaintext tidak disimpan di database maupun log.
+- Sekali pakai: konsumsi via QR maupun kode manual menghapus kedua hash (`qr_token_hash = NULL`, `manual_code_hash = NULL`) dan menandai `qr_consumed_at = now()`.
+- Keterikatan: satu pasang token/kode = satu peminjaman.
 
 ## Alur scan dua langkah
 

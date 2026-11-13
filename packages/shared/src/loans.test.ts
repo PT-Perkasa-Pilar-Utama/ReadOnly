@@ -102,6 +102,7 @@ describe('shared loans schemas & contracts (BE-S2-02 & BE-S3-01)', () => {
       loan_id: 'a0000000-0000-0000-0000-000000000001',
       loan_no: 'PJM-20261109-0001',
       qr_token: 'dGhpcy1pcy1hLXF1aXJreS10b2tlbg',
+      manual_code: 'PJM-7K9M2P',
     });
     expect(valid.success).toBe(true);
 
@@ -109,8 +110,17 @@ describe('shared loans schemas & contracts (BE-S2-02 & BE-S3-01)', () => {
       loan_id: 'a0000000-0000-0000-0000-000000000001',
       loan_no: 'PJM-20261109-0001',
       qr_token: '',
+      manual_code: 'PJM-7K9M2P',
     });
     expect(emptyToken.success).toBe(false);
+
+    const invalidManualCode = loanQrResponseDataSchema.safeParse({
+      loan_id: 'a0000000-0000-0000-0000-000000000001',
+      loan_no: 'PJM-20261109-0001',
+      qr_token: 'dGhpcy1pcy1hLXF1aXJreS10b2tlbg',
+      manual_code: 'PJM-0011OO',
+    });
+    expect(invalidManualCode.success).toBe(false);
   });
 
   it('validates admin loans query defaults and bounds', () => {

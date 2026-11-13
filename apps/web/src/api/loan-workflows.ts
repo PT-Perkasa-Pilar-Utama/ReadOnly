@@ -40,6 +40,7 @@ export interface LoanQrToken {
   loan_id: string;
   loan_no: string;
   qr_token: string;
+  manual_code: string;
 }
 
 export interface LoanQrPreview {
@@ -121,6 +122,7 @@ export async function getLoanQr(loanId: string): Promise<LoanQrToken> {
         loan_id: z.string(),
         loan_no: z.string(),
         qr_token: z.string().min(1),
+        manual_code: z.string().min(1),
       }),
     ),
   );

@@ -83,6 +83,7 @@ describe('@readonly/db schema and seed utilities', () => {
       'fine_paid_at',
       'fine_paid_by',
       'qr_token_hash',
+      'manual_code_hash',
       'qr_consumed_at',
     ]);
   });

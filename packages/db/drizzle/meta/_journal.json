@@ -8,6 +8,13 @@
       "when": 1794159251413,
       "tag": "0000_daily_major_mapleleaf",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794563908663,
+      "tag": "0001_perfect_leopardon",
+      "breakpoints": true
     }
   ]
 }

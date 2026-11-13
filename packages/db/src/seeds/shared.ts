@@ -79,6 +79,7 @@ export const QA_IDS = {
 } as const;
 
 export const QA_PENDING_QR_TOKEN = 'qa-seed-pending-qr-token-128bit-0001';
+export const QA_PENDING_MANUAL_CODE = 'PJM-QA2345';
 
 export function sha256Hex(input: string): string {
   return createHash('sha256').update(input).digest('hex');

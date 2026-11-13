@@ -181,6 +181,7 @@ export const loans = pgTable(
     finePaidAt: timestamp('fine_paid_at', { withTimezone: true }),
     finePaidBy: uuid('fine_paid_by').references(() => users.id),
     qrTokenHash: text('qr_token_hash'),
+    manualCodeHash: text('manual_code_hash'),
     qrConsumedAt: timestamp('qr_consumed_at', { withTimezone: true }),
   },
   (table) => [
