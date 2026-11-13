@@ -1,12 +1,12 @@
-**Version:** 0.1
-**Date:** 2026-11-05
+**Version:** 1.0
+**Date:** 2026-11-13
 **Author:** Tech Lead
-**Status:** Draft
+**Status:** Approved
 **Phase:** Technical Specification
 
 # QR Borrow Confirmation - ReadOnly
 
-Desain token QR dan alur scan (Q-18).
+Desain token QR dan alur scan (Q-18). Detail keputusan pustaka dan UX mengacu pada [2026-11-13-qr-implementation-q18.md](../decisions/2026-11-13-qr-implementation-q18.md).
 
 ## Desain token (Q-18): design it twice
 
@@ -20,7 +20,7 @@ Desain token QR dan alur scan (Q-18).
 - **Kelebihan:** tidak ada render server, ringan, mudah diuji.
 - **Kekurangan:** token diekspos ke memori klien (risiko rendah: token sekali pakai, hash di DB).
 
-**Keputusan: Opsi B.** Token diekspos ke klien karena sekali pakai dan terikat satu peminjaman; hash disimpan di `loans.qr_token_hash`. QR generator di `apps/web` (pustaka `<pin at scaffold>`, Q-18).
+**Keputusan: Opsi B.** Token diekspos ke klien karena sekali pakai dan terikat satu peminjaman; hash disimpan di `loans.qr_token_hash`. QR generator di `apps/web` menggunakan pustaka `qrcode` (v1.5.x) dan scanner kamera Admin menggunakan `html5-qrcode` (v2.3.x).
 
 ## Spesifikasi token
 
@@ -43,9 +43,13 @@ Desain token QR dan alur scan (Q-18).
 | Token sudah dipakai | "QR Code tidak valid" | tidak ada |
 | Peminjaman bukan PENDING | "QR Code tidak valid" | tidak ada |
 
+Pesan UI untuk Admin: `"QR Code tidak valid. Silakan scan ulang."` (Ejaan baku: *silakan*).
+
 ## Izin kamera dan HTTPS
 
 - Kamera browser hanya jalan di Secure Context (HTTPS). Development `localhost` dikecualikan (Q-01). Izin kamera diminta saat pop up scanner dibuka.
+- Jika izin ditolak, tampilkan panduan aktivasi izin kamera pada modal scanner.
+- Jalur cadangan input manual kode peminjaman disediakan sebagai fallback bila kamera tidak berfungsi.
 
 ## Rate limit scan QR
 
@@ -76,8 +80,9 @@ Tanpa kedaluwarsa token pada v1 (terikat Q-16: tidak ada pembatalan/ekspirasi PE
 - [13-stock-integrity-and-concurrency.md](13-stock-integrity-and-concurrency.md)
 - [15-scheduler-and-notifications.md](15-scheduler-and-notifications.md)
 - [api-specs/04-loans.md](../api-specs/04-loans.md)
+- [decisions/2026-11-13-qr-implementation-q18.md](../decisions/2026-11-13-qr-implementation-q18.md)
 - [docs/business/acceptance-criteria-breakdown/acceptance-criteria-sprint-2.md](../business/acceptance-criteria-breakdown/acceptance-criteria-sprint-2.md)
 
 ## Open Follow-ups
 
-Q-01 (kedaluwarsa token jika BA mengubah), Q-15 (pesan 409), Q-33 (pustaka scanner).
+Q-01 (kedaluwarsa token jika BA mengubah), Q-15 (pesan 409).

@@ -1,7 +1,7 @@
-**Version:** 0.1
-**Date:** 2026-11-05
+**Version:** 1.0
+**Date:** 2026-11-13
 **Author:** Tech Lead
-**Status:** Draft
+**Status:** Approved
 **Phase:** Technical Specification
 
 # Technical Stack - ReadOnly
@@ -21,8 +21,8 @@
 | Test unit | bun:test | bun:test | Tidak perlu dependency tambahan |
 | Test e2e | Playwright | Playwright | Standart untuk browser QA, mendukung kamera fake Chromium |
 | Container | Docker Compose + Nginx | Docker | P-16: satu VPS, reverse proxy TLS |
-| QR generator | pustaka QR | `<pin at scaffold>` | Pustaka QR generator (mis. qrcode) di `apps/web` |
-| QR scanner | pustaka scanner | `<pin at scaffold>` | Webcam QR scanner (mis. html5-qrcode) di `apps/web` |
+| QR generator | qrcode | qrcode (v1.5.x) | Pustaka QR generator render Canvas/SVG di `apps/web` (Q-18) |
+| QR scanner | html5-qrcode | html5-qrcode (v2.3.x) | Webcam QR scanner di `apps/web` (Q-18) |
 | Scheduler | in-process | Bun + advisory lock | P-14: job harian satu proses, tanpa dependensi OS cron |
 | Hash password | bcrypt | bcrypt | `bcrypt` di `apps/api` (SEC-01) |
 
@@ -44,7 +44,7 @@ Pin yang sudah digunakan scaffold dicatat eksak di `package.json` workspace dan 
 | Biome | 2.6.6 |
 | PostgreSQL image | 16.15 |
 
-Drizzle, Playwright, bcrypt, dan pustaka QR belum ditambahkan karena schema DB, alur produk, dan E2E berada di kartu berikutnya. P-18 tetap berlaku: versi dependency baru harus dipin eksak pada kartu pemiliknya.
+Drizzle, Playwright, bcrypt, serta pustaka QR dipin eksak pada kartu pemiliknya sesuai aturan P-18. Pustaka QR generator dan scanner (`qrcode` dan `html5-qrcode`) telah ditetapkan melalui [2026-11-13-qr-implementation-q18.md](../decisions/2026-11-13-qr-implementation-q18.md).
 
 ## What we deliberately do NOT use
 
@@ -67,8 +67,10 @@ Drizzle, Playwright, bcrypt, dan pustaka QR belum ditambahkan karena schema DB, 
 
 - [01-overview.md](01-overview.md)
 - [05-module-definitions.md](05-module-definitions.md)
+- [14-qr-borrow-confirmation.md](14-qr-borrow-confirmation.md)
+- [decisions/2026-11-13-qr-implementation-q18.md](../decisions/2026-11-13-qr-implementation-q18.md)
 - [docs/coding-standard/_index.md](../coding-standard/_index.md)
 
 ## Open Follow-ups
 
-Q-18 (pustaka QR generator/scanner yang dipilih), Q-31 (pustaka scheduler bila pindah worker), Q-33 (pustaka UI).
+Q-31 (pustaka scheduler bila pindah worker), Q-33 (pustaka UI).
