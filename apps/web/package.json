@@ -11,10 +11,12 @@
     "@readonly/shared": "workspace:*",
     "@tanstack/solid-query": "5.105.3",
     "@tanstack/solid-router": "1.170.43",
+    "qrcode": "1.5.4",
     "solid-js": "1.9.18",
     "zod": "4.6.7"
   },
   "devDependencies": {
+    "@types/qrcode": "1.5.6",
     "vite": "8.3.6",
     "vite-plugin-solid": "2.11.15"
   }

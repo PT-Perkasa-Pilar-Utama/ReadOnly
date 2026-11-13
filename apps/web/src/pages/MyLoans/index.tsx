@@ -1,8 +1,13 @@
 import { createQuery, useQueryClient } from '@tanstack/solid-query';
 import { createSignal, For, Show } from 'solid-js';
-import { getMyLoans, type MemberLoan } from '../../api/loan-workflows';
+import {
+  getLoanQr,
+  getMyLoans,
+  type MemberLoan,
+} from '../../api/loan-workflows';
 import { ErrorNotice, Loading } from '../../components/Feedback';
 import Icon from '../../components/Icon';
+import LoanQrCanvas from '../../components/loans/LoanQrCanvas';
 import { ReturnFeedbackModal } from '../../components/loans/ReturnFeedbackModal';
 import Modal from '../../components/Modal';
 import Pagination from '../../components/Pagination';
@@ -32,13 +37,65 @@ export default function MyLoansPage() {
   const queryClient = useQueryClient();
   const [page, setPage] = createSignal(1);
   const [qrNoticeLoan, setQrNoticeLoan] = createSignal<MemberLoan | null>(null);
+  const [qrNumber, setQrNumber] = createSignal('');
+  const [qrToken, setQrToken] = createSignal<string | null>(null);
+  const [qrLoading, setQrLoading] = createSignal(false);
+  const [qrError, setQrError] = createSignal<Error | null>(null);
   const [returnLoan, setReturnLoan] = createSignal<MemberLoan | null>(null);
+  let qrRequestId = 0;
 
   const loansQuery = createQuery(() => ({
     queryKey: ['member', 'loans', page()],
     queryFn: ({ signal }) => getMyLoans(page(), 10, signal),
     refetchOnWindowFocus: true,
   }));
+
+  async function loadLoanQr(loan: MemberLoan) {
+    if (qrLoading()) return;
+
+    const requestId = ++qrRequestId;
+    setQrLoading(true);
+    setQrError(null);
+    setQrToken(null);
+    setQrNumber(loan.loan_no);
+
+    try {
+      const result = await getLoanQr(loan.id);
+      if (requestId !== qrRequestId || qrNoticeLoan()?.id !== loan.id) return;
+      if (result.loan_id !== loan.id) {
+        throw new Error('Respons QR Code tidak sesuai dengan peminjaman.');
+      }
+
+      setQrNumber(result.loan_no);
+      setQrToken(result.qr_token);
+    } catch (cause) {
+      if (requestId !== qrRequestId || qrNoticeLoan()?.id !== loan.id) return;
+      setQrError(
+        cause instanceof Error
+          ? cause
+          : new Error('QR Code gagal dimuat. Silakan coba lagi.'),
+      );
+    } finally {
+      if (requestId === qrRequestId) setQrLoading(false);
+    }
+  }
+
+  function openQrModal(loan: MemberLoan) {
+    setQrNoticeLoan(loan);
+    setQrNumber(loan.loan_no);
+    setQrToken(null);
+    setQrError(null);
+    void loadLoanQr(loan);
+  }
+
+  function closeQrModal() {
+    qrRequestId += 1;
+    setQrNoticeLoan(null);
+    setQrNumber('');
+    setQrToken(null);
+    setQrError(null);
+    setQrLoading(false);
+  }
 
   async function handleReturnSubmitted() {
     setReturnLoan(null);
@@ -151,7 +208,7 @@ export default function MyLoansPage() {
                                   <button
                                     type="button"
                                     class="button my-loans-action"
-                                    onClick={() => setQrNoticeLoan(loan)}
+                                    onClick={() => openQrModal(loan)}
                                   >
                                     QR
                                   </button>
@@ -207,14 +264,57 @@ export default function MyLoansPage() {
         {(loan) => (
           <Modal
             title="QR Code Peminjaman"
-            onClose={() => setQrNoticeLoan(null)}
+            onClose={closeQrModal}
             class="loan-qr-modal"
           >
             <div class="loan-qr-modal__content">
-              <p class="loan-qr-modal__number">{loan.loan_no}</p>
-              <p>
-                Tampilan QR menunggu penetapan pustaka generator QR pada
-                keputusan Q-18. Token QR tidak ditampilkan sebagai teks.
+              <div class="loan-qr-modal__book">
+                <div class="my-loans-cover">
+                  <Show
+                    when={loan.book_cover_url}
+                    fallback={<span aria-hidden="true">▤</span>}
+                  >
+                    <img
+                      src={loan.book_cover_url ?? ''}
+                      alt={`Cover ${loan.book_title}`}
+                    />
+                  </Show>
+                </div>
+                <div class="loan-qr-modal__book-info">
+                  <strong>{loan.book_title}</strong>
+                  <span>{loan.book_author}</span>
+                  <span class="my-loans-status my-loans-status--pending">
+                    Pending Peminjaman
+                  </span>
+                </div>
+              </div>
+
+              <Show when={qrLoading()}>
+                <Loading label="Membuat QR Code peminjaman…" />
+              </Show>
+
+              <Show when={qrError()}>
+                <div class="loan-qr-modal__error" role="alert">
+                  <p>QR Code gagal dimuat. Silakan coba lagi.</p>
+                  <button
+                    type="button"
+                    class="button secondary"
+                    onClick={() => void loadLoanQr(loan)}
+                    disabled={qrLoading()}
+                  >
+                    Coba lagi
+                  </button>
+                </div>
+              </Show>
+
+              <Show when={qrToken()}>
+                {(token) => <LoanQrCanvas token={token()} />}
+              </Show>
+
+              <p class="loan-qr-modal__number">No. Pinjaman: {qrNumber()}</p>
+
+              <p class="loan-qr-modal__helper">
+                Tunjukkan kode QR ini kepada Admin untuk konfirmasi peminjaman.
               </p>
             </div>
           </Modal>
