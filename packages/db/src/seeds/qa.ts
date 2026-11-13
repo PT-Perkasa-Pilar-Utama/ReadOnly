@@ -16,6 +16,7 @@ import {
   formatIndonesianDate,
   hashPassword,
   QA_IDS,
+  QA_PENDING_MANUAL_CODE,
   QA_PENDING_QR_TOKEN,
   type SeedCounts,
   type SeedOptions,
@@ -359,6 +360,7 @@ export async function seedQa(
         fineAmount: 0,
         fineStatus: 'Belum Bayar',
         qrTokenHash: sha256Hex(QA_PENDING_QR_TOKEN),
+        manualCodeHash: sha256Hex(QA_PENDING_MANUAL_CODE),
         qrConsumedAt: null,
       },
       // 2. QA-L-BORROW-0 (BORROWED, due in 3 days for DUE_SOON_3D notification & AC-10.04)

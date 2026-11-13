@@ -106,6 +106,7 @@ describe('Member and Admin loan workflows API', () => {
           loan_id: 'loan-1',
           loan_no: 'PJM-1',
           qr_token: 'one-time-token',
+          manual_code: 'PJM-7K9M2P',
         },
       }),
     );
@@ -114,6 +115,7 @@ describe('Member and Admin loan workflows API', () => {
       loan_id: 'loan-1',
       loan_no: 'PJM-1',
       qr_token: 'one-time-token',
+      manual_code: 'PJM-7K9M2P',
     });
     expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/v1/loans/loan-1/qr');
   });

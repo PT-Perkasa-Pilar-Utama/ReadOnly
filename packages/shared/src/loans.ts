@@ -102,10 +102,13 @@ export const myLoansResponseSchema = z.object({
 
 export type MyLoansResponse = PaginatedResponse<MyLoanItem>;
 
+export const MANUAL_CODE_REGEX = /^PJM-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{6}$/;
+
 export const loanQrResponseDataSchema = z.object({
   loan_id: z.string().regex(UUID_REGEX),
   loan_no: z.string(),
   qr_token: z.string().min(1),
+  manual_code: z.string().regex(MANUAL_CODE_REGEX),
 });
 
 export type LoanQrResponseData = z.infer<typeof loanQrResponseDataSchema>;

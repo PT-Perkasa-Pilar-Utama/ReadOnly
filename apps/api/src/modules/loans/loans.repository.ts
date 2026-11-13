@@ -8,6 +8,7 @@ import {
   loans,
   notifications,
   QA_IDS,
+  QA_PENDING_MANUAL_CODE,
   QA_PENDING_QR_TOKEN,
   ratings,
   sha256Hex,
@@ -61,6 +62,7 @@ export interface InsertLoanData {
   status: 'PENDING';
   requestedAt: Date;
   qrTokenHash: string;
+  manualCodeHash: string;
 }
 
 export interface CreatedLoanRecord {
@@ -101,6 +103,7 @@ export interface LoanRecord {
   fineAmount: number | null;
   fineStatus: FineStatus;
   qrTokenHash: string | null;
+  manualCodeHash: string | null;
   qrConsumedAt: Date | null;
 }
 
@@ -254,7 +257,11 @@ export interface LoansRepository {
     params: MyLoansQuery,
   ): Promise<MyLoansQueryResult>;
   findLoanRecordById(loanId: string): Promise<LoanRecord | null>;
-  updateQrTokenHash(loanId: string, qrTokenHash: string): Promise<void>;
+  updateQrTokenHash(
+    loanId: string,
+    qrTokenHash: string,
+    manualCodeHash: string,
+  ): Promise<void>;
   listAdminLoans(params: AdminLoansQuery): Promise<AdminLoansQueryResult>;
   findAdminLoanById(id: string): Promise<AdminLoanDetailRecord | null>;
   findLoanById(id: string): Promise<AdminLoanDetailRecord | null>;
@@ -332,6 +339,7 @@ export class DrizzleLoansRepository implements LoansRepository {
         status: data.status,
         requestedAt: data.requestedAt,
         qrTokenHash: data.qrTokenHash,
+        manualCodeHash: data.manualCodeHash,
         lateDays: 0,
         fineStatus: 'Belum Bayar',
       })
@@ -400,6 +408,7 @@ export class DrizzleLoansRepository implements LoansRepository {
         fineAmount: loans.fineAmount,
         fineStatus: loans.fineStatus,
         qrTokenHash: loans.qrTokenHash,
+        manualCodeHash: loans.manualCodeHash,
         qrConsumedAt: loans.qrConsumedAt,
       })
       .from(loans)
@@ -412,10 +421,14 @@ export class DrizzleLoansRepository implements LoansRepository {
     return row as LoanRecord;
   }
 
-  async updateQrTokenHash(loanId: string, qrTokenHash: string): Promise<void> {
+  async updateQrTokenHash(
+    loanId: string,
+    qrTokenHash: string,
+    manualCodeHash: string,
+  ): Promise<void> {
     await this.db
       .update(loans)
-      .set({ qrTokenHash })
+      .set({ qrTokenHash, manualCodeHash })
       .where(eq(loans.id, loanId));
   }
 
@@ -652,7 +665,10 @@ export class DrizzleLoansRepository implements LoansRepository {
       .innerJoin(books, eq(loans.bookId, books.id))
       .where(
         and(
-          eq(loans.qrTokenHash, qrTokenHash),
+          or(
+            eq(loans.qrTokenHash, qrTokenHash),
+            eq(loans.manualCodeHash, qrTokenHash),
+          ),
           eq(loans.status, 'PENDING'),
           isNull(loans.qrConsumedAt),
         ),
@@ -732,6 +748,7 @@ export class DrizzleLoansRepository implements LoansRepository {
           confirmedBy: actorId,
           dueDate: params.dueDate,
           qrTokenHash: null,
+          manualCodeHash: null,
           qrConsumedAt: params.now,
         })
         .where(
@@ -1060,6 +1077,7 @@ export interface InMemoryLoan {
   finePaidBy?: string | null;
   returnConfirmedBy?: string | null;
   qrTokenHash?: string | null;
+  manualCodeHash?: string | null;
   qrConsumedAt?: Date | null;
 }
 
@@ -1305,6 +1323,7 @@ export class InMemoryLoansRepository implements LoansRepository {
       fineAmount: 0,
       fineStatus: 'Belum Bayar',
       qrTokenHash: sha256Hex(QA_PENDING_QR_TOKEN),
+      manualCodeHash: sha256Hex(QA_PENDING_MANUAL_CODE),
       qrConsumedAt: null,
     });
 
@@ -1546,6 +1565,7 @@ export class InMemoryLoansRepository implements LoansRepository {
       fineAmount: null,
       fineStatus: 'Belum Bayar',
       qrTokenHash: data.qrTokenHash,
+      manualCodeHash: data.manualCodeHash,
       qrConsumedAt: null,
     };
 
@@ -1607,14 +1627,20 @@ export class InMemoryLoansRepository implements LoansRepository {
       fineAmount: loan.fineAmount,
       fineStatus: loan.fineStatus,
       qrTokenHash: loan.qrTokenHash ?? null,
+      manualCodeHash: loan.manualCodeHash ?? null,
       qrConsumedAt: loan.qrConsumedAt ?? null,
     };
   }
 
-  async updateQrTokenHash(loanId: string, qrTokenHash: string): Promise<void> {
+  async updateQrTokenHash(
+    loanId: string,
+    qrTokenHash: string,
+    manualCodeHash: string,
+  ): Promise<void> {
     const loan = this.loans.find((l) => l.id === loanId);
     if (loan) {
       loan.qrTokenHash = qrTokenHash;
+      loan.manualCodeHash = manualCodeHash;
     }
   }
 
@@ -1820,7 +1846,8 @@ export class InMemoryLoansRepository implements LoansRepository {
   ): Promise<QrPreviewRecord | null> {
     const loan = this.loans.find(
       (item) =>
-        item.qrTokenHash === qrTokenHash &&
+        (item.qrTokenHash === qrTokenHash ||
+          item.manualCodeHash === qrTokenHash) &&
         item.status === 'PENDING' &&
         item.qrConsumedAt === null,
     );
@@ -1875,6 +1902,7 @@ export class InMemoryLoansRepository implements LoansRepository {
     loan.confirmedAt = params.now;
     loan.dueDate = params.dueDate;
     loan.qrTokenHash = null;
+    loan.manualCodeHash = null;
     loan.qrConsumedAt = params.now;
 
     const actorId =

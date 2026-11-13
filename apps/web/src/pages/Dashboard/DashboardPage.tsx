@@ -105,7 +105,10 @@ export function DashboardPage() {
     staleTime: 30_000,
   }));
 
-  function normalizeQrError(error: unknown) {
+  function normalizeQrError(
+    error: unknown,
+    source: 'scanner' | 'manual' = 'scanner',
+  ) {
     if (
       error instanceof Error &&
       /permission denied|notallowed|not allowed|NotAllowedError|secure context/i.test(
@@ -114,7 +117,9 @@ export function DashboardPage() {
     ) {
       return 'Akses kamera tidak diizinkan. Silakan aktifkan izin kamera pada browser Anda untuk memindai QR Code.';
     }
-    return 'QR Code tidak valid. Silakan scan ulang.';
+    return source === 'manual'
+      ? 'QR Code atau kode konfirmasi tidak valid. Silakan periksa kembali.'
+      : 'QR Code tidak valid. Silakan scan ulang.';
   }
 
   async function stopScanner() {
@@ -222,7 +227,7 @@ export function DashboardPage() {
       setManualOpen(false);
       setManualToken('');
     } catch (error) {
-      setScannerError(normalizeQrError(error));
+      setScannerError(normalizeQrError(error, 'manual'));
     } finally {
       setPreviewLoading(false);
     }
@@ -466,12 +471,15 @@ export function DashboardPage() {
         >
           <form onSubmit={submitManualToken}>
             <label class="dashboard-manual-label" for="manual-loan-token">
-              Kode QR / token peminjaman
+              Kode konfirmasi manual (atau token QR)
             </label>
             <input
               id="manual-loan-token"
               class="dashboard-manual-input"
               type="text"
+              placeholder="Contoh: PJM-7K9M2P"
+              autocapitalize="characters"
+              spellcheck={false}
               value={manualToken()}
               onInput={(event) => setManualToken(event.currentTarget.value)}
               autocomplete="off"

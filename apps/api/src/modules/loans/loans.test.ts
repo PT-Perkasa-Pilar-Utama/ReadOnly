@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import {
   type Database,
   QA_IDS,
+  QA_PENDING_MANUAL_CODE,
   QA_PENDING_QR_TOKEN,
   sha256Hex,
 } from '@readonly/db';
@@ -12,6 +13,7 @@ import {
   FINE_PAYMENT_SUCCESS_MESSAGE,
   FINE_REQUIRED_MESSAGE,
   type FinePaymentResponse,
+  MANUAL_CODE_REGEX,
   type QrConfirmResponse,
   type QrPreviewResponse,
   RATING_REQUIRED_MESSAGE,
@@ -1703,6 +1705,7 @@ describe('loans module - POST /admin/loans/qr/confirm (BE-S2-03 / AC-08.03, AC-0
       .find((l) => l.id === QA_IDS.loans.pending);
     expect(updatedLoan?.status).toBe('BORROWED');
     expect(updatedLoan?.qrTokenHash).toBeNull();
+    expect(updatedLoan?.manualCodeHash).toBeNull();
     expect(updatedLoan?.qrConsumedAt).toBeInstanceOf(Date);
     expect(updatedLoan?.confirmedAt).toBeInstanceOf(Date);
 
@@ -1757,6 +1760,74 @@ describe('loans module - POST /admin/loans/qr/confirm (BE-S2-03 / AC-08.03, AC-0
       }),
     );
     expect(resPreview.status).toBe(422);
+
+    const resManualAfterQrConfirm = await app.handle(
+      new Request('http://localhost/api/v1/admin/loans/qr/confirm', {
+        method: 'POST',
+        headers: {
+          ...adminHeaders,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ qr_token: QA_PENDING_MANUAL_CODE }),
+      }),
+    );
+    expect(resManualAfterQrConfirm.status).toBe(422);
+  });
+
+  it('supports preview and single-use confirm via manual confirmation code (case-insensitive)', async () => {
+    const { app, loansRepository, getAdminHeaders } = createTestHarness();
+    const adminHeaders = await getAdminHeaders();
+
+    const previewRes = await app.handle(
+      new Request('http://localhost/api/v1/admin/loans/qr/preview', {
+        method: 'POST',
+        headers: {
+          ...adminHeaders,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          qr_token: ` ${QA_PENDING_MANUAL_CODE.toLowerCase()} `,
+        }),
+      }),
+    );
+    expect(previewRes.status).toBe(200);
+    const previewBody = (await previewRes.json()) as QrPreviewResponse;
+    expect(previewBody.data.loan_id).toBe(QA_IDS.loans.pending);
+    expect(previewBody.data.loan_no).toBe('PJM-20261109-0001');
+
+    const confirmRes = await app.handle(
+      new Request('http://localhost/api/v1/admin/loans/qr/confirm', {
+        method: 'POST',
+        headers: {
+          ...adminHeaders,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ qr_token: QA_PENDING_MANUAL_CODE }),
+      }),
+    );
+    expect(confirmRes.status).toBe(200);
+    const confirmBody = (await confirmRes.json()) as QrConfirmResponse;
+    expect(confirmBody.data.status).toBe('BORROWED');
+
+    const updatedLoan = loansRepository
+      .getLoans()
+      .find((l) => l.id === QA_IDS.loans.pending);
+    expect(updatedLoan?.qrTokenHash).toBeNull();
+    expect(updatedLoan?.manualCodeHash).toBeNull();
+    expect(updatedLoan?.qrConsumedAt).toBeInstanceOf(Date);
+
+    // Cross-channel invalidation: QR token and manual code are both invalid after confirm
+    const qrAfterManualRes = await app.handle(
+      new Request('http://localhost/api/v1/admin/loans/qr/preview', {
+        method: 'POST',
+        headers: {
+          ...adminHeaders,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ qr_token: QA_PENDING_QR_TOKEN }),
+      }),
+    );
+    expect(qrAfterManualRes.status).toBe(422);
   });
 
   it('returns 409 conflict when book stock is exhausted (Q-15)', async () => {
@@ -2170,6 +2241,7 @@ describe('Loans API - BE-S2-02: Ajukan pinjam + token QR', () => {
           loan_id: string;
           loan_no: string;
           qr_token: string;
+          manual_code: string;
         };
       };
 
@@ -2177,12 +2249,14 @@ describe('Loans API - BE-S2-02: Ajukan pinjam + token QR', () => {
       expect(json.data.loan_no).toBe('PJM-20261109-0001');
       expect(json.data.qr_token).toBeDefined();
       expect(json.data.qr_token.length).toBeGreaterThanOrEqual(16);
+      expect(json.data.manual_code).toMatch(MANUAL_CODE_REGEX);
 
-      // Verify that database hash now matches sha256(qr_token)
+      // Verify that database hashes now match sha256(qr_token) and sha256(manual_code)
       const loan = await loansRepository.findLoanRecordById(
         QA_IDS.loans.pending,
       );
       expect(loan?.qrTokenHash).toBe(sha256Hex(json.data.qr_token));
+      expect(loan?.manualCodeHash).toBe(sha256Hex(json.data.manual_code));
     });
 
     it('rotates token upon subsequent calls to GET /loans/:id/qr', async () => {
@@ -2200,7 +2274,9 @@ describe('Loans API - BE-S2-02: Ajukan pinjam + token QR', () => {
         ),
       );
       expect(res1.status).toBe(200);
-      const json1 = (await res1.json()) as { data: { qr_token: string } };
+      const json1 = (await res1.json()) as {
+        data: { qr_token: string; manual_code: string };
+      };
 
       // Second call (rotates token)
       const res2 = await app.handle(
@@ -2213,15 +2289,19 @@ describe('Loans API - BE-S2-02: Ajukan pinjam + token QR', () => {
         ),
       );
       expect(res2.status).toBe(200);
-      const json2 = (await res2.json()) as { data: { qr_token: string } };
+      const json2 = (await res2.json()) as {
+        data: { qr_token: string; manual_code: string };
+      };
 
       expect(json1.data.qr_token).not.toBe(json2.data.qr_token);
+      expect(json1.data.manual_code).not.toBe(json2.data.manual_code);
 
-      // Verify database has latest token hash
+      // Verify database has latest token hashes
       const loan = await loansRepository.findLoanRecordById(
         QA_IDS.loans.pending,
       );
       expect(loan?.qrTokenHash).toBe(sha256Hex(json2.data.qr_token));
+      expect(loan?.manualCodeHash).toBe(sha256Hex(json2.data.manual_code));
     });
 
     it('returns 403 when requesting QR for a loan belonging to another member (SEC-05)', async () => {

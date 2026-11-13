@@ -26,7 +26,7 @@ API mengirim kode status bahasa Inggris (`status`) sekaligus label UI bahasa Ind
 - **Purpose:** buat peminjaman berstatus `PENDING` (`"Pending Peminjaman"`, AC-08.01, AC-08.04).
 - **Access:** member.
 - **Input:** `{ "book_id": "uuid" }`.
-- **Behavior:** validasi buku aktif (`deleted_at IS NULL`) dan `available_count > 0`; buat token QR 128-bit CSPRNG, simpan SHA-256 hash di `qr_token_hash`, lalu `INSERT loans` dengan `status = 'PENDING'`, `requested_at = now()`, dan `loan_no` berformat `PJM-YYYYMMDD-####`. Stok fisik belum dikurangi pada langkah ini (dikurangi saat konfirmasi QR Admin sesuai AC-08.03).
+- **Behavior:** validasi buku aktif (`deleted_at IS NULL`) dan `available_count > 0`; buat token QR 128-bit CSPRNG dan kode konfirmasi manual (`PJM-XXXXXX`), simpan masing-masing SHA-256 hash di `qr_token_hash` dan `manual_code_hash`, lalu `INSERT loans` dengan `status = 'PENDING'`, `requested_at = now()`, dan `loan_no` berformat `PJM-YYYYMMDD-####`. Stok fisik belum dikurangi pada langkah ini (dikurangi saat konfirmasi QR Admin sesuai AC-08.03).
 - **Output:** HTTP 201 `{ "data": { "id": "uuid", "loan_no": "PJM-20261109-0001", "status": "PENDING", "status_label": "Pending Peminjaman" }, "message": "Pengajuan peminjaman berhasil" }`.
 - **Errors:** `session_not_found` 401, `forbidden` 403, `not_found` 404, `conflict` 409 `"Buku tidak tersedia (stok habis)"` (AC-08.04) `[COPY-TBD Q-15]`.
 - **Traceability:** AC-08.01, AC-08.04.
@@ -64,10 +64,10 @@ API mengirim kode status bahasa Inggris (`status`) sekaligus label UI bahasa Ind
 
 ## GET /loans/:id/qr
 
-- **Purpose:** ambil/rotasi token QR untuk ditampilkan pada pop up `"QR Code Peminjaman"` dan dipindai Admin Perpus (AC-08.02).
+- **Purpose:** ambil/rotasi token QR dan kode konfirmasi manual untuk ditampilkan pada pop up `"QR Code Peminjaman"` dan dipindai/diinput Admin Perpus (AC-08.02).
 - **Access:** member (pemilik), **hanya untuk peminjaman berstatus `PENDING`** (`"Pending Peminjaman"`).
-- **Behavior:** pastikan peminjaman milik Member yang login dan berstatus `PENDING` serta `qr_consumed_at IS NULL`. Hasilkan token QR 128-bit CSPRNG baru, perbarui `qr_token_hash = sha256(token)` di database, dan kembalikan plaintext `qr_token` ke klien untuk dirender menjadi gambar QR lokal (Opsi B spek 14).
-- **Output:** HTTP 200 `{ "data": { "loan_id": "uuid", "loan_no": "PJM-20261109-0001", "qr_token": "base64url-string" } }`.
+- **Behavior:** pastikan peminjaman milik Member yang login dan berstatus `PENDING` serta `qr_consumed_at IS NULL`. Hasilkan token QR 128-bit CSPRNG baru serta kode konfirmasi manual (`PJM-XXXXXX`, 6 karakter alfanumerik unambiguous), perbarui `qr_token_hash = sha256(token)` dan `manual_code_hash = sha256(manual_code)` di database, lalu kembalikan plaintext `qr_token` dan `manual_code` ke klien untuk dirender pada modal QR (Opsi B spek 14).
+- **Output:** HTTP 200 `{ "data": { "loan_id": "uuid", "loan_no": "PJM-20261109-0001", "qr_token": "base64url-string", "manual_code": "PJM-7K9M2P" } }`.
 - **Errors:** `session_not_found` 401, `forbidden` 403 bila bukan pemilik, `not_found` 404, `invalid_state_transition` 422 bila status bukan `PENDING`.
 - **Traceability:** AC-08.02.
 
@@ -75,8 +75,8 @@ API mengirim kode status bahasa Inggris (`status`) sekaligus label UI bahasa Ind
 
 - **Purpose:** pratinjau detail peminjaman dari hasil scan QR untuk mengisi pop up `"Konfirmasi Peminjaman"` sebelum Admin menekan tombol konfirmasi (AC-08.03, AC-08.06).
 - **Access:** admin.
-- **Input:** `{ "qr_token": "string" }`.
-- **Behavior:** verifikasi `sha256(qr_token)` terhadap `loans.qr_token_hash` dengan syarat `status = 'PENDING'` dan `qr_consumed_at IS NULL`. Endpoint ini **tidak** mengonsumsi token dan **tidak** mengubah status/stok.
+- **Input:** `{ "qr_token": "string" }` (menerima string `qr_token` hasil scan kamera maupun `manual_code` format `PJM-XXXXXX`, dinormalisasi uppercase untuk format `PJM-XXXXXX`).
+- **Behavior:** verifikasi `sha256(qr_token)` terhadap `loans.qr_token_hash` atau `loans.manual_code_hash` dengan syarat `status = 'PENDING'` dan `qr_consumed_at IS NULL`. Endpoint ini **tidak** mengonsumsi token dan **tidak** mengubah status/stok.
 - **Output:** HTTP 200:
 
 ```json
@@ -108,11 +108,11 @@ API mengirim kode status bahasa Inggris (`status`) sekaligus label UI bahasa Ind
 
 - **Purpose:** konsumsi token QR, kurangi stok buku secara atomik, dan ubah status menjadi `BORROWED` (`"Sedang Dipinjam"`, AC-08.03, AC-08.06).
 - **Access:** admin.
-- **Input:** `{ "qr_token": "string" }`.
+- **Input:** `{ "qr_token": "string" }` (menerima string `qr_token` maupun `manual_code` `PJM-XXXXXX`).
 - **Behavior:** dalam satu transaksi database melalui `LoanService.transition`:
-  1. Cari peminjaman `WHERE qr_token_hash = sha256(qr_token) AND status = 'PENDING' AND qr_consumed_at IS NULL`. Bila tidak ada -> HTTP 422 `invalid_token` (`"QR Code tidak valid"`, AC-08.06).
+  1. Cari peminjaman `WHERE (qr_token_hash = sha256(input) OR manual_code_hash = sha256(input)) AND status = 'PENDING' AND qr_consumed_at IS NULL`. Bila tidak ada -> HTTP 422 `invalid_token` (`"QR Code tidak valid"`, AC-08.06).
   2. Jalankan conditional decrement: `UPDATE books SET available_count = available_count - 1 WHERE id = book_id AND available_count > 0`. Bila 0 baris ter-update -> rollback transaksi dan kembalikan HTTP 409 `conflict` (`"Buku tidak tersedia (stok habis)"`, Q-15).
-  3. Update `loans`: `status = 'BORROWED'`, `confirmed_at = now()`, `confirmed_by = adminId`, `due_date = confirmed_date_wib + 7 days`, `qr_token_hash = NULL`, `qr_consumed_at = now()`.
+  3. Update `loans`: `status = 'BORROWED'`, `confirmed_at = now()`, `confirmed_by = adminId`, `due_date = confirmed_date_wib + 7 days`, `qr_token_hash = NULL`, `manual_code_hash = NULL`, `qr_consumed_at = now()`.
   4. Insert baris audit ke `loan_events` (`from_status: 'PENDING'`, `to_status: 'BORROWED'`, `actor_id: adminId`).
 - **Output:** HTTP 200 `{ "data": { "loan_id": "uuid", "status": "BORROWED", "status_label": "Sedang Dipinjam", "due_date": "2026-11-16" }, "message": "Buku berhasil Dipinjam" }`.
 - **Errors:** `invalid_token` 422 `"QR Code tidak valid"` (AC-08.06), `conflict` 409 `"Buku tidak tersedia (stok habis)"` (Q-15).

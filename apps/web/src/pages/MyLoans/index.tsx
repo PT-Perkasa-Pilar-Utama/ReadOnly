@@ -39,6 +39,7 @@ export default function MyLoansPage() {
   const [qrNoticeLoan, setQrNoticeLoan] = createSignal<MemberLoan | null>(null);
   const [qrNumber, setQrNumber] = createSignal('');
   const [qrToken, setQrToken] = createSignal<string | null>(null);
+  const [manualCode, setManualCode] = createSignal<string | null>(null);
   const [qrLoading, setQrLoading] = createSignal(false);
   const [qrError, setQrError] = createSignal<Error | null>(null);
   const [returnLoan, setReturnLoan] = createSignal<MemberLoan | null>(null);
@@ -57,6 +58,7 @@ export default function MyLoansPage() {
     setQrLoading(true);
     setQrError(null);
     setQrToken(null);
+    setManualCode(null);
     setQrNumber(loan.loan_no);
 
     try {
@@ -68,6 +70,7 @@ export default function MyLoansPage() {
 
       setQrNumber(result.loan_no);
       setQrToken(result.qr_token);
+      setManualCode(result.manual_code);
     } catch (cause) {
       if (requestId !== qrRequestId || qrNoticeLoan()?.id !== loan.id) return;
       setQrError(
@@ -84,6 +87,7 @@ export default function MyLoansPage() {
     setQrNoticeLoan(loan);
     setQrNumber(loan.loan_no);
     setQrToken(null);
+    setManualCode(null);
     setQrError(null);
     void loadLoanQr(loan);
   }
@@ -93,6 +97,7 @@ export default function MyLoansPage() {
     setQrNoticeLoan(null);
     setQrNumber('');
     setQrToken(null);
+    setManualCode(null);
     setQrError(null);
     setQrLoading(false);
   }
@@ -313,8 +318,21 @@ export default function MyLoansPage() {
 
               <p class="loan-qr-modal__number">No. Pinjaman: {qrNumber()}</p>
 
+              <Show when={manualCode()}>
+                {(code) => (
+                  <div class="loan-qr-modal__manual-code">
+                    <span class="loan-qr-modal__manual-label">
+                      Kode Konfirmasi
+                    </span>
+                    <code class="loan-qr-modal__manual-value">{code()}</code>
+                  </div>
+                )}
+              </Show>
+
               <p class="loan-qr-modal__helper">
-                Tunjukkan kode QR ini kepada Admin untuk konfirmasi peminjaman.
+                Tunjukkan kode QR ini kepada Admin untuk konfirmasi peminjaman,
+                atau sebutkan kode konfirmasi manual jika pemindai tidak
+                tersedia.
               </p>
             </div>
           </Modal>
